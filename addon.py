@@ -1329,7 +1329,7 @@ class BlenderMCPServer:
             """Call Rodin API, get the job uuid and subscription key"""
             files = [
                 *[("images", (f"{i:04d}{img_suffix}", img)) for i, (img_suffix, img) in enumerate(images)],
-                ("tier", (None, "Sketch")),
+                ("tier", (None, bpy.context.scene.blendermcp_hyper3d_tier)),
                 ("mesh_mode", (None, "Raw")),
             ]
             if text_prompt:
@@ -1356,7 +1356,7 @@ class BlenderMCPServer:
         ):
         try:
             req_data = {
-                "tier": "Sketch",
+                "tier": bpy.context.scene.blendermcp_hyper3d_tier,
             }
             if images:
                 req_data["input_image_urls"] = images
@@ -1622,6 +1622,7 @@ class BLENDERMCP_PT_Panel(bpy.types.Panel):
         layout.prop(scene, "blendermcp_use_hyper3d", text="Use Hyper3D Rodin 3D model generation")
         if scene.blendermcp_use_hyper3d:
             layout.prop(scene, "blendermcp_hyper3d_mode", text="Rodin Mode")
+            layout.prop(scene, "blendermcp_hyper3d_tier", text="Rodin Generation Tier")
             layout.prop(scene, "blendermcp_hyper3d_api_key", text="API Key")
             layout.operator("blendermcp.set_hyper3d_free_trial_api_key", text="Set Free Trial API Key")
         
@@ -1702,8 +1703,18 @@ def register():
 
     bpy.types.Scene.blendermcp_use_hyper3d = bpy.props.BoolProperty(
         name="Use Hyper3D Rodin",
-        description="Enable Hyper3D Rodin generatino integration",
+        description="Enable Hyper3D Rodin generation integration",
         default=False
+    )
+
+    bpy.types.Scene.blendermcp_hyper3d_tier = bpy.props.EnumProperty(
+        name="Rodin Generation Tier",
+        description="Choose the platform used to call Rodin APIs",
+        items=[
+            ("Sketch", "Sketch", "Sketch is optimized for generation speed, and is recommended for fast prototyping."),
+            ("Regular", "Regular", "Regular is optimized for quality, and is recommended for production."),
+        ],
+        default="Sketch"
     )
 
     bpy.types.Scene.blendermcp_hyper3d_mode = bpy.props.EnumProperty(
