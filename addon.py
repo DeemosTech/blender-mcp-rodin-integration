@@ -310,7 +310,8 @@ class BlenderMCPServer:
 
     def create_object(self, type="CUBE", name=None, location=(0, 0, 0), rotation=(0, 0, 0), scale=(1, 1, 1),
                     align="WORLD", major_segments=48, minor_segments=12, mode="MAJOR_MINOR",
-                    major_radius=1.0, minor_radius=0.25, abso_major_rad=1.25, abso_minor_rad=0.75, generate_uvs=True):
+                    major_radius=1.0, minor_radius=0.25, abso_major_rad=1.25, abso_minor_rad=0.75, generate_uvs=True,
+                    custom_properties=None):
         """Create a new object in the scene"""
         try:
             # Deselect all objects first
@@ -369,6 +370,14 @@ class BlenderMCPServer:
                 if obj.data:
                     obj.data.name = name
             
+            # Set rotation mode to XYZ
+            obj.rotation_mode = 'XYZ'
+            
+            # Add custom_properties
+            if custom_properties:
+                for key, value in custom_properties.items():
+                    obj[key] = value
+                    
             # Return the object info
             result = {
                 "name": obj.name,
@@ -376,6 +385,10 @@ class BlenderMCPServer:
                 "location": [obj.location.x, obj.location.y, obj.location.z],
                 "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
                 "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
+                "rotation_mode": obj.rotation_mode,
+                "custom_properties": {key: obj[key]
+                                  for key in custom_properties.keys()}
+                                    if custom_properties else {}
             }
             
             if obj.type == "MESH":
@@ -388,7 +401,8 @@ class BlenderMCPServer:
             traceback.print_exc()
             return {"error": str(e)}
 
-    def modify_object(self, name, location=None, rotation=None, scale=None, visible=None):
+    def modify_object(self, name, location=None, rotation=None, scale=None, visible=None,
+                      custom_properties=None):
         """Modify an existing object in the scene"""
         # Find the object by name
         obj = bpy.data.objects.get(name)
@@ -409,6 +423,14 @@ class BlenderMCPServer:
             obj.hide_viewport = not visible
             obj.hide_render = not visible
         
+        # Set rotation mode to XYZ
+            obj.rotation_mode = 'XYZ'
+        
+        # Add custom_properties
+        if custom_properties:
+            for key, value in custom_properties.items():
+                obj[key] = value
+            
         result = {
             "name": obj.name,
             "type": obj.type,
@@ -416,6 +438,10 @@ class BlenderMCPServer:
             "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
             "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
             "visible": obj.visible_get(),
+            "rotation_mode": obj.rotation_mode,
+            "custom_properties": {key: obj[key]
+                                  for key in custom_properties.keys()}
+                                    if custom_properties else {}
         }
 
         if obj.type == "MESH":

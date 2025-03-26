@@ -285,7 +285,8 @@ def create_object(
     minor_radius: float = 0.25,
     abso_major_rad: float = 1.25,
     abso_minor_rad: float = 0.75,
-    generate_uvs: bool = True
+    generate_uvs: bool = True,
+    custom_properties: Dict[str, str] = None
 ) -> str:
     """
     Create a new object in the Blender scene.
@@ -307,7 +308,9 @@ def create_object(
     - abso_major_rad: Total exterior radius of the torus
     - abso_minor_rad: Total interior radius of the torus
     - generate_uvs: Whether to generate a default UV map
-    
+    - custom_properties: Determine the initial coordinate content and object description
+        ---temporarily set as the coordinate string and initial name string 
+        at the time of generation.--testUpdate-
     Returns:
     A message indicating the created object name.
     """
@@ -319,16 +322,20 @@ def create_object(
         loc = location or [0, 0, 0]
         rot = rotation or [0, 0, 0]
         sc = scale or [1, 1, 1]
-        
+        default_custom_properties = custom_properties or {
+            "nowTransform": f"location{json.dumps(loc)}rotation{json.dumps(rot)}scale{json.dumps(sc)}",
+            "customContent": "Test0325"}
         params = {
             "type": type,
             "location": loc,
             "rotation": rot,
+            "custom_properties": default_custom_properties
         }
         
         if name:
             params["name"] = name
-
+            default_custom_properties["initialName"] = name
+            
         if type == "TORUS":
             # For torus, the scale is not used.
             params.update({
@@ -342,13 +349,13 @@ def create_object(
                 "abso_minor_rad": abso_minor_rad,
                 "generate_uvs": generate_uvs
             })
-            result = blender.send_command("create_object", params)
-            return f"Created {type} object: {result['name']}"
+
         else:
             # For non-torus objects, include scale
             params["scale"] = sc
-            result = blender.send_command("create_object", params)
-            return f"Created {type} object: {result['name']}"
+
+        result = blender.send_command("create_object", params)
+        result = f"Created {type} object: {json.dumps(result['name'])}"
     except Exception as e:
         logger.error(f"Error creating object: {str(e)}")
         return f"Error creating object: {str(e)}"
@@ -361,7 +368,8 @@ def modify_object(
     location: List[float] = None,
     rotation: List[float] = None,
     scale: List[float] = None,
-    visible: bool = None
+    visible: bool = None,
+    custom_properties: Dict[str, str] = None
 ) -> str:
     """
     Modify an existing object in the Blender scene.
@@ -372,13 +380,16 @@ def modify_object(
     - rotation: Optional [x, y, z] rotation in radians
     - scale: Optional [x, y, z] scale factors
     - visible: Optional boolean to set visibility
+    - custom_properties:Determine the initial coordinate content and object 
+        description—temporarily set as the coordinate string and initial name 
+        string at the time of generation.
     """
     try:
         # Get the global connection
         blender = get_blender_connection()
         
         params = {"name": name}
-        
+       
         if location is not None:
             params["location"] = location
         if rotation is not None:
@@ -387,7 +398,9 @@ def modify_object(
             params["scale"] = scale
         if visible is not None:
             params["visible"] = visible
-            
+        if custom_properties is not None:
+            params["custom_properties"] = custom_properties
+               
         result = blender.send_command("modify_object", params)
         return f"Modified object: {result['name']}"
     except Exception as e:
