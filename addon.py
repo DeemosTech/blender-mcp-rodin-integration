@@ -1560,7 +1560,6 @@ class BlenderMCPServer:
                 filepath=temp_file.name,
                 mesh_name=name
             )
-            obj.rotation_mode = "XYZ"
             
             result = {
                 "name": obj.name,
@@ -1620,7 +1619,7 @@ class BlenderMCPServer:
                 filepath=temp_file.name,
                 mesh_name=name
             )
-            obj.rotation_mode = "XYZ"
+            
             result = {
                 "name": obj.name,
                 "type": obj.type,
