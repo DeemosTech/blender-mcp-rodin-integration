@@ -325,18 +325,19 @@ def create_object(
         default_custom_properties = custom_properties or {
             "nowTransform": f"location{json.dumps(loc)}rotation{json.dumps(rot)}scale{json.dumps(sc)}",
             "customContent": "Test0325"}
-        if name:
-            params["name"] = name
-            default_custom_properties["initialName"] = name
-        else:
-            default_custom_properties["initialName"] = "noNameNow"
-            
+       
         params = {
             "type": type,
             "location": loc,
             "rotation": rot,
             "custom_properties": default_custom_properties
         }
+        
+        if name:
+            params["name"] = name
+            default_custom_properties["initialName"] = name
+        else:
+            default_custom_properties["initialName"] = "noNameNow"    
         
         if type == "TORUS":
             # For torus, the scale is not used.
