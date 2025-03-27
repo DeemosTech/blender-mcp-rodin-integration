@@ -369,12 +369,15 @@ class BlenderMCPServer:
                 obj.name = name
                 if obj.data:
                     obj.data.name = name
+                    obj["initial_name"] = name
+            else:
+                obj["initial_name"] = name
             
             # Set rotation mode to XYZ
             obj.rotation_mode = 'XYZ'
             
             # Add custom_properties
-            if custom_properties:
+            if custom_properties is not None:
                 for key, value in custom_properties.items():
                     obj[key] = value
                     
@@ -408,6 +411,8 @@ class BlenderMCPServer:
         obj = bpy.data.objects.get(name)
         if not obj:
             raise ValueError(f"Object not found: {name}")
+        else:
+            obj["initial_name"] = name
         
         # Modify properties as requested
         if location is not None:

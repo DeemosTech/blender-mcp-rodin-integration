@@ -310,7 +310,7 @@ def create_object(
     - generate_uvs: Whether to generate a default UV map
     - custom_properties: Determine the initial coordinate content and object description
         ---temporarily set as the coordinate string and initial name string 
-        at the time of generation.--testUpdate-
+        at the time of generation.--testUpdate
     Returns:
     A message indicating the created object name.
     """
@@ -325,6 +325,12 @@ def create_object(
         default_custom_properties = custom_properties or {
             "nowTransform": f"location{json.dumps(loc)}rotation{json.dumps(rot)}scale{json.dumps(sc)}",
             "customContent": "Test0325"}
+        if name:
+            params["name"] = name
+            default_custom_properties["initialName"] = name
+        else:
+            default_custom_properties["initialName"] = "noNameNow"
+            
         params = {
             "type": type,
             "location": loc,
@@ -332,10 +338,6 @@ def create_object(
             "custom_properties": default_custom_properties
         }
         
-        if name:
-            params["name"] = name
-            default_custom_properties["initialName"] = name
-            
         if type == "TORUS":
             # For torus, the scale is not used.
             params.update({
@@ -457,23 +459,23 @@ def set_material(
         logger.error(f"Error setting material: {str(e)}")
         return f"Error setting material: {str(e)}"
 
-@mcp.tool()
-def execute_blender_code(ctx: Context, code: str) -> str:
-    """
-    Execute arbitrary Python code in Blender.
+# @mcp.tool()
+# def execute_blender_code(ctx: Context, code: str) -> str:
+#     """
+#     Execute arbitrary Python code in Blender.
     
-    Parameters:
-    - code: The Python code to execute
-    """
-    try:
-        # Get the global connection
-        blender = get_blender_connection()
+#     Parameters:
+#     - code: The Python code to execute
+#     """
+#     try:
+#         # Get the global connection
+#         blender = get_blender_connection()
         
-        result = blender.send_command("execute_code", {"code": code})
-        return f"Code executed successfully: {result.get('result', '')}"
-    except Exception as e:
-        logger.error(f"Error executing code: {str(e)}")
-        return f"Error executing code: {str(e)}"
+#         result = blender.send_command("execute_code", {"code": code})
+#         return f"Code executed successfully: {result.get('result', '')}"
+#     except Exception as e:
+#         logger.error(f"Error executing code: {str(e)}")
+#         return f"Error executing code: {str(e)}"
 
 @mcp.tool()
 def get_polyhaven_categories(ctx: Context, asset_type: str = "hdris") -> str:
