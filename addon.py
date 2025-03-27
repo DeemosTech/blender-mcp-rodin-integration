@@ -386,7 +386,6 @@ class BlenderMCPServer:
                 "name": obj.name,
                 "type": obj.type,
                 "location": [obj.location.x, obj.location.y, obj.location.z],
-                "rotation_mode": obj.rotation_mode,
                 "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
                 "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
                 "custom_properties": {key: obj[key]
@@ -440,7 +439,6 @@ class BlenderMCPServer:
             "name": obj.name,
             "type": obj.type,
             "location": [obj.location.x, obj.location.y, obj.location.z],
-            "rotation_mode": obj.rotation_mode,
             "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
             "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
             "visible": obj.visible_get(),
@@ -481,7 +479,6 @@ class BlenderMCPServer:
             "name": obj.name,
             "type": obj.type,
             "location": [obj.location.x, obj.location.y, obj.location.z],
-            "rotation_mode": obj.rotation_mode,
             "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
             "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
             "visible": obj.visible_get(),
@@ -1554,7 +1551,6 @@ class BlenderMCPServer:
                 "name": obj.name,
                 "type": obj.type,
                 "location": [obj.location.x, obj.location.y, obj.location.z],
-                "rotation_mode": obj.rotation_mode,
                 "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
                 "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
             }
@@ -1613,7 +1609,6 @@ class BlenderMCPServer:
                 "name": obj.name,
                 "type": obj.type,
                 "location": [obj.location.x, obj.location.y, obj.location.z],
-                "rotation_mode": obj.rotation_mode,
                 "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
                 "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
             }
