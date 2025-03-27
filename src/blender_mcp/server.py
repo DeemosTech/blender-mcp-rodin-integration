@@ -310,7 +310,7 @@ def create_object(
     - generate_uvs: Whether to generate a default UV map
     - custom_properties: Determine the initial coordinate content and object description
         ---temporarily set as the coordinate string and initial name string 
-        at the time of generation.--testUpdate
+        at the time of generation.--testUpdate--
     Returns:
     A message indicating the created object name.
     """
