@@ -308,7 +308,8 @@ class BlenderMCPServer:
             [*min_corner], [*max_corner]
         ]
 
-    def create_object(self, type="CUBE", name=None, location=(0, 0, 0), rotation=(0, 0, 0), scale=(1, 1, 1),
+    def create_object(self, type="CUBE", name=None, location=(0, 0, 0),
+                      rotation_mode='XYZ',rotation=(0, 0, 0), scale=(1, 1, 1),
                     align="WORLD", major_segments=48, minor_segments=12, mode="MAJOR_MINOR",
                     major_radius=1.0, minor_radius=0.25, abso_major_rad=1.25, abso_minor_rad=0.75, generate_uvs=True,
                     custom_properties=None):
@@ -319,19 +320,20 @@ class BlenderMCPServer:
             
             # Create the object based on type
             if type == "CUBE":
-                bpy.ops.mesh.primitive_cube_add(location=location, rotation=rotation, scale=scale)
+                bpy.ops.mesh.primitive_cube_add(location=location,rotation_mode=rotation_mode, rotation=rotation, scale=scale)
             elif type == "SPHERE":
-                bpy.ops.mesh.primitive_uv_sphere_add(location=location, rotation=rotation, scale=scale)
+                bpy.ops.mesh.primitive_uv_sphere_add(location=location,rotation_mode=rotation_mode, rotation=rotation, scale=scale)
             elif type == "CYLINDER":
-                bpy.ops.mesh.primitive_cylinder_add(location=location, rotation=rotation, scale=scale)
+                bpy.ops.mesh.primitive_cylinder_add(location=location,rotation_mode=rotation_mode, rotation=rotation, scale=scale)
             elif type == "PLANE":
-                bpy.ops.mesh.primitive_plane_add(location=location, rotation=rotation, scale=scale)
+                bpy.ops.mesh.primitive_plane_add(location=location, rotation_mode=rotation_mode, rotation=rotation, scale=scale)
             elif type == "CONE":
-                bpy.ops.mesh.primitive_cone_add(location=location, rotation=rotation, scale=scale)
+                bpy.ops.mesh.primitive_cone_add(location=location, rotation_mode=rotation_mode, rotation=rotation, scale=scale)
             elif type == "TORUS":
                 bpy.ops.mesh.primitive_torus_add(
                     align=align,
                     location=location,
+                    rotation_mode=rotation_mode,
                     rotation=rotation,
                     major_segments=major_segments,
                     minor_segments=minor_segments,
@@ -343,11 +345,11 @@ class BlenderMCPServer:
                     generate_uvs=generate_uvs
                 )
             elif type == "EMPTY":
-                bpy.ops.object.empty_add(location=location, rotation=rotation, scale=scale)
+                bpy.ops.object.empty_add(location=location, rotation_mode=rotation_mode, rotation=rotation, scale=scale)
             elif type == "CAMERA":
-                bpy.ops.object.camera_add(location=location, rotation=rotation)
+                bpy.ops.object.camera_add(location=location, rotation_mode=rotation_mode, rotation=rotation)
             elif type == "LIGHT":
-                bpy.ops.object.light_add(type='POINT', location=location, rotation=rotation, scale=scale)
+                bpy.ops.object.light_add(type='POINT', location=location, rotation_mode=rotation_mode, rotation=rotation, scale=scale)
             else:
                 raise ValueError(f"Unsupported object type: {type}")
             
@@ -386,9 +388,9 @@ class BlenderMCPServer:
                 "name": obj.name,
                 "type": obj.type,
                 "location": [obj.location.x, obj.location.y, obj.location.z],
+                "rotation_mode": obj.rotation_mode,
                 "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
                 "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
-                "rotation_mode": obj.rotation_mode,
                 "custom_properties": {key: obj[key]
                                   for key in custom_properties.keys()}
                                     if custom_properties else {}
@@ -404,7 +406,8 @@ class BlenderMCPServer:
             traceback.print_exc()
             return {"error": str(e)}
 
-    def modify_object(self, name, location=None, rotation=None, scale=None, visible=None,
+    def modify_object(self, name, location=None, rotation_mode='XYZ', 
+                      rotation=None, scale=None, visible=None,
                       custom_properties=None):
         """Modify an existing object in the scene"""
         # Find the object by name
@@ -419,6 +422,7 @@ class BlenderMCPServer:
             obj.location = location
         
         if rotation is not None:
+            obj.rotation_mode = rotation_mode
             obj.rotation_euler = rotation
         
         if scale is not None:
@@ -440,10 +444,10 @@ class BlenderMCPServer:
             "name": obj.name,
             "type": obj.type,
             "location": [obj.location.x, obj.location.y, obj.location.z],
+            "rotation_mode": obj.rotation_mode,
             "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
             "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
             "visible": obj.visible_get(),
-            "rotation_mode": obj.rotation_mode,
             "custom_properties": {key: obj[key]
                                   for key in custom_properties.keys()}
                                     if custom_properties else {}
@@ -481,6 +485,7 @@ class BlenderMCPServer:
             "name": obj.name,
             "type": obj.type,
             "location": [obj.location.x, obj.location.y, obj.location.z],
+            "rotation_mode": obj.rotation_mode,
             "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
             "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
             "visible": obj.visible_get(),
@@ -1553,6 +1558,7 @@ class BlenderMCPServer:
                 "name": obj.name,
                 "type": obj.type,
                 "location": [obj.location.x, obj.location.y, obj.location.z],
+                "rotation_mode": obj.rotation_mode,
                 "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
                 "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
             }
@@ -1611,6 +1617,7 @@ class BlenderMCPServer:
                 "name": obj.name,
                 "type": obj.type,
                 "location": [obj.location.x, obj.location.y, obj.location.z],
+                "rotation_mode": obj.rotation_mode,
                 "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
                 "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
             }
