@@ -308,9 +308,7 @@ def create_object(
     - abso_major_rad: Total exterior radius of the torus
     - abso_minor_rad: Total interior radius of the torus
     - generate_uvs: Whether to generate a default UV map
-    - custom_properties: Determine the initial coordinate content and object description
-        ---temporarily set as the coordinate string and initial name string 
-        at the time of generation.--testUpdate--
+    - custom_properties:Custom properties to be set on the object
     Returns:
     A message indicating the created object name.
     """
@@ -323,14 +321,19 @@ def create_object(
         rot = rotation or [0, 0, 0]
         sc = scale or [1, 1, 1]
         default_custom_properties = custom_properties or {
-            "nowTransform": f"location{json.dumps(loc)}rotation{json.dumps(rot)}scale{json.dumps(sc)}",
-            "customContent": "Test0325"}
+                        "initialTransform": 
+                            {
+                                "location": loc,
+                                "rotation": rot,
+                                "scale": sc
+                            }
+                    }
        
         params = {
             "type": type,
             "location": loc,
             "rotation": rot,
-            "custom_properties": default_custom_properties
+            "custom_properties": json.dumps(default_custom_properties)
         }
         
         if name:

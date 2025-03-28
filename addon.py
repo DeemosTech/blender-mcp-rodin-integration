@@ -377,10 +377,24 @@ class BlenderMCPServer:
             obj.rotation_mode = 'XYZ'
             
             # Add custom_properties
-            if custom_properties is not None:
-                for key, value in custom_properties.items():
-                    obj[key] = value
-                    
+            # if custom_properties is not None:
+            #     if isinstance(custom_properties, str):
+            #         try:
+            #             import json
+            #             custom_properties = json.loads(custom_properties)  # 尝试解析 JSON 字符串
+            #         except json.JSONDecodeError:
+            #             raise ValueError("custom_properties 必须是字典或有效的 JSON 字符串")
+            #     elif not isinstance(custom_properties, dict):
+            #         raise TypeError("custom_properties 必须是字典类型")
+
+            #     for key, value in custom_properties.items():
+            #         obj[key] = value
+            # else:
+            obj["initialTransform"] = {
+                "location": [obj.location.x, obj.location.y, obj.location.z],
+                "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
+                "scale": [obj.scale.x, obj.scale.y, obj.scale.z]
+            }      
             # Patch for PLANE: scale don't work with bpy.ops.mesh.primitive_plane_add()
             if type in {"PLANE"}:
                 obj.scale = scale
@@ -392,9 +406,7 @@ class BlenderMCPServer:
                 "location": [obj.location.x, obj.location.y, obj.location.z],
                 "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
                 "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
-                "custom_properties": {key: obj[key]
-                                  for key in custom_properties.keys()}
-                                    if custom_properties else {}
+                
             }
             
             if obj.type == "MESH":
@@ -435,10 +447,15 @@ class BlenderMCPServer:
         # Set rotation mode to XYZ
         obj.rotation_mode = 'XYZ'
         # Add custom_properties
-        if custom_properties:
-            for key, value in custom_properties.items():
-                obj[key] = value
-            
+        # if custom_properties:
+        #     for key, value in custom_properties.items():
+        #         obj[key] = value
+        obj["initialTransform"] = {
+                "location": [obj.location.x, obj.location.y, obj.location.z],
+                "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
+                "scale": [obj.scale.x, obj.scale.y, obj.scale.z]
+            } 
+          
         result = {
             "name": obj.name,
             "type": obj.type,
@@ -446,9 +463,6 @@ class BlenderMCPServer:
             "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
             "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
             "visible": obj.visible_get(),
-            "custom_properties": {key: obj[key]
-                                  for key in custom_properties.keys()}
-                                    if custom_properties else {}
         }
 
         if obj.type == "MESH":
@@ -1568,13 +1582,18 @@ class BlenderMCPServer:
                 filepath=temp_file.name,
                 mesh_name=name
             )
-            
+            obj["initialTransform"] = {
+                    "location": [obj.location.x, obj.location.y, obj.location.z],
+                    "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
+                    "scale": [obj.scale.x, obj.scale.y, obj.scale.z]
+                }
             result = {
                 "name": obj.name,
                 "type": obj.type,
                 "location": [obj.location.x, obj.location.y, obj.location.z],
                 "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
                 "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
+                "initialTransform": obj["initialTransform"],
             }
 
             if obj.type == "MESH":
@@ -1627,6 +1646,11 @@ class BlenderMCPServer:
                 filepath=temp_file.name,
                 mesh_name=name
             )
+            obj["initialTransform"] = {
+                "location": [obj.location.x, obj.location.y, obj.location.z],
+                "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
+                "scale": [obj.scale.x, obj.scale.y, obj.scale.z]
+            }
             
             result = {
                 "name": obj.name,
@@ -1634,6 +1658,7 @@ class BlenderMCPServer:
                 "location": [obj.location.x, obj.location.y, obj.location.z],
                 "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
                 "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
+                "initialTransform": obj["initialTransform"],
             }
 
             if obj.type == "MESH":
