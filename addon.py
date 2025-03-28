@@ -1,4 +1,6 @@
 import bpy
+from mathutils import Vector
+import math
 import mathutils
 import json
 import threading
@@ -30,6 +32,79 @@ class BlenderMCPServer:
         self.running = False
         self.socket = None
         self.server_thread = None
+    
+    def render_images(self,name,distance):
+        obj = bpy.data.objects.get(name)
+        camera_distance=distance
+        camera_angles=[(0,-45),(0,-90),(0,-135),(90,0)]
+        for i, (pitch, heading) in enumerate(camera_angles):
+            theta = math.radians(90 - pitch)
+            phi = math.radians(heading)
+            
+            x = camera_distance * math.sin(theta) * math.cos(phi)
+            y = camera_distance * math.sin(theta) * math.sin(phi)
+            z = camera_distance * math.cos(theta)
+            
+            bpy.ops.object.camera_add()
+            cam = bpy.context.object
+            cam.name = f"Camera.{i+1:03}"
+            cam.data.lens = 35  
+            
+            cam.parent = obj
+            
+            cam.location = (x, y, z)
+            
+            direction = -Vector((x, y, z)).normalized()
+            rot_quat = direction.to_track_quat('-Z', 'Y')
+            cam.rotation_euler = rot_quat.to_euler()
+
+        for area in bpy.context.screen.areas:
+            if area.type == 'VIEW_3D':
+                space = area.spaces.active
+                space.shading.type = 'SOLID'
+                space.shading.color_type = 'MATERIAL'
+                space.shading.show_xray = True
+                space.shading.background_type = 'VIEWPORT'
+                space.shading.background_color = (0,0,0) #black background
+                space.overlay.show_floor = False
+                space.overlay.show_axis_x = False
+                space.overlay.show_axis_y = False
+                space.overlay.show_axis_z = False
+        
+        # --It is not checked in this environment yet, so Comment out this section.--
+        # --It's different way between our goal.here saving image,will change next version--
+        # output_dir = bpy.path.abspath("//viewpoint_screenshots/")
+        # os.makedirs(output_dir, exist_ok=True)
+
+        # for i, cam in enumerate(cameras):
+        #     bpy.context.scene.camera = cam
+            
+        #     for area in bpy.context.window.screen.areas:
+        #         if area.type == 'VIEW_3D':
+        #             with bpy.context.temp_override(
+        #                     window=bpy.context.window,
+        #                     area=area,
+        #                     region=next(reg for reg in area.regions if reg.type == 'WINDOW'),
+        #                     active_object=cam  
+        #             ):
+        #                 bpy.ops.view3d.object_as_camera()
+                    
+        #             area.spaces.active.region_3d.view_perspective = 'CAMERA'
+        #             break
+
+        #     bpy.context.scene.render.resolution_x = 1920
+        #     bpy.context.scene.render.resolution_y = 1080
+        #     bpy.context.scene.render.resolution_percentage = 100
+        #     bpy.context.scene.render.image_settings.file_format = 'PNG'
+        #     bpy.context.scene.render.image_settings.color_mode = 'RGB'
+        #     bpy.context.scene.render.film_transparent = False
+            
+        #     output_path = os.path.join(output_dir, f"viewpoint_{i+1}.png")
+        #     bpy.context.scene.render.filepath = output_path
+            
+        #     bpy.ops.render.opengl(write_still=True)
+
+        return "create carema done"
     
     def start(self):
         if self.running:
@@ -501,6 +576,7 @@ class BlenderMCPServer:
             "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
             "visible": obj.visible_get(),
             "materials": [],
+            "images": [],
         }
 
         if obj.type == "MESH":
@@ -520,7 +596,7 @@ class BlenderMCPServer:
                 "edges": len(mesh.edges),
                 "polygons": len(mesh.polygons),
             }
-        
+        obj_info["images"] = self.render_images(name,5)
         return obj_info
     
     def execute_code(self, code):
