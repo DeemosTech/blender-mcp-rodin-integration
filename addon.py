@@ -1472,22 +1472,30 @@ class BlenderMCPServer:
             mesh_obj = imported_objects[0]
             print("Single mesh imported, no cleanup needed.")
         else:
-            parent_obj = imported_objects[0]
-            if parent_obj.type == 'EMPTY' and len(parent_obj.children) == 1:
-                potential_mesh = parent_obj.children[0]
-                if potential_mesh.type == 'MESH':
-                    print("GLB structure confirmed: Empty node with one mesh child.")
-                    
-                    # Unparent the mesh from the empty node
-                    potential_mesh.parent = None
-                    
-                    # Remove the empty node
-                    bpy.data.objects.remove(parent_obj)
-                    print("Removed empty node, keeping only the mesh.")
-                    
-                    mesh_obj = potential_mesh
+            if len(imported_objects) == 2:
+                empty_objs = [i for i in imported_objects if i.type == "EMPTY"]
+                if len(empty_objs) != 1:
+                    print("Error: Expected an empty node with one mesh child or a single mesh object.")
+                    return
+                parent_obj = empty_objs.pop()
+                if len(parent_obj.children) == 1:
+                    potential_mesh = parent_obj.children[0]
+                    if potential_mesh.type == 'MESH':
+                        print("GLB structure confirmed: Empty node with one mesh child.")
+                        
+                        # Unparent the mesh from the empty node
+                        potential_mesh.parent = None
+                        
+                        # Remove the empty node
+                        bpy.data.objects.remove(parent_obj)
+                        print("Removed empty node, keeping only the mesh.")
+                        
+                        mesh_obj = potential_mesh
+                    else:
+                        print("Error: Child is not a mesh object.")
+                        return
                 else:
-                    print("Error: Child is not a mesh object.")
+                    print("Error: Expected an empty node with one mesh child or a single mesh object.")
                     return
             else:
                 print("Error: Expected an empty node with one mesh child or a single mesh object.")
