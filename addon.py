@@ -11,6 +11,7 @@ import tempfile
 import traceback
 import os
 import shutil
+import random
 from PIL import Image
 from datetime import datetime
 from bpy.props import StringProperty, IntProperty, BoolProperty, EnumProperty
@@ -35,9 +36,16 @@ class BlenderMCPServer:
         self.socket = None
         self.server_thread = None
     
-    def render_images(self,name,distance):
-        obj = bpy.data.objects.get(name)
-        obj.color=(0.83, 0.14, 0, 1)  # RGBA -orange and red
+    def random_color(self):
+        return (random.random(), random.uniform(0.3,0.85), random.uniform(0.3,0.85), 1.0)
+
+    def render_images(self,position,name,distance):
+        if name is not None:
+            obj = bpy.data.objects.get(name)
+            obj.color=self.random_color()  
+        else:
+            target_position=position
+            
         camera_distance=distance
         camera_angles=[(30, -45),(0, -90),(-30, 225),(0,90)]
         for area in bpy.context.screen.areas:
@@ -64,14 +72,16 @@ class BlenderMCPServer:
             
             bpy.ops.object.camera_add()
             cam = bpy.context.object
-            cam.name = f"Camera.{i+1:03}"
+            cam.name = f"Viewpoint_Camera_{i+1}"  # special name for deleting them    
             cam.data.lens = 35  
-            
-            cam.parent = obj
-            
             cam.location = (x, y, z)
             
-            direction = -Vector((x, y, z)).normalized()
+            if name is not None:
+                cam.parent = obj
+                direction = -Vector((x, y, z)).normalized()
+            else:
+                direction = Vector(target_position) - Vector(cam.location)
+      
             rot_quat = direction.to_track_quat('-Z', 'Y')
             cam.rotation_euler = rot_quat.to_euler()
             cameras.append(cam)
@@ -661,7 +671,7 @@ class BlenderMCPServer:
                 "edges": len(mesh.edges),
                 "polygons": len(mesh.polygons),
             }
-        obj_info["images"] = self.render_images(name,5)
+        obj_info["images"] = self.render_images((obj.location.x, obj.location.y, obj.location.z),name,5)
         return obj_info
     
     def execute_code(self, code):
