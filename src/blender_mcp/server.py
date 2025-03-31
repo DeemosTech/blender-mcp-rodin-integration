@@ -326,7 +326,8 @@ def create_object(
                                 "location": loc,
                                 "rotation": rot,
                                 "scale": sc
-                            }
+                            },
+                        "initialName": name
                     }
        
         params = {
@@ -337,10 +338,7 @@ def create_object(
         }
         
         if name:
-            params["name"] = name
-            default_custom_properties["initialName"] = name
-        else:
-            default_custom_properties["initialName"] = "noNameNow"    
+            params["name"] = name   
         
         if type == "TORUS":
             # For torus, the scale is not used.
@@ -386,9 +384,7 @@ def modify_object(
     - rotation: Optional [x, y, z] rotation in radians
     - scale: Optional [x, y, z] scale factors
     - visible: Optional boolean to set visibility
-    - custom_properties:Determine the initial coordinate content and object 
-        description—temporarily set as the coordinate string and initial name 
-        string at the time of generation.
+    - custom_properties:Custom properties to be set on the object
     """
     try:
         # Get the global connection
