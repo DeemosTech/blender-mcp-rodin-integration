@@ -39,10 +39,34 @@ class BlenderMCPServer:
     def random_color(self):
         return (random.random(), random.uniform(0.3,0.85), random.uniform(0.3,0.85), 1.0)
 
+    def random_color_by_name(self,name):
+        obj = bpy.data.objects.get(name)
+        color=obj.color=self.random_color()
+        return color
+    
+    def calculate_farthest_point(self,center, objects):
+        """Calculate the farthest point from center using bounding boxes"""
+        max_distance = 0
+        
+        for obj in objects:
+            if not hasattr(obj, 'bound_box'):
+                continue
+                
+            bbox_world = [obj.matrix_world @ Vector(corner) for corner in obj.bound_box]
+            
+            for point in bbox_world:
+                distance = (Vector(point) - Vector(center)).length
+                if distance > max_distance:
+                    max_distance = distance            
+        return max_distance    
+    
     def render_images(self,position,name,distance):
-        if name is not None:
-            obj = bpy.data.objects.get(name)
-            obj.color=self.random_color()  
+        if name and name.strip():
+            try:
+                obj = bpy.data.objects[name]  
+                obj.color = self.random_color()
+            except KeyError:
+                print(f"Error: Object '{name}' not found in scene!")  
         else:
             target_position=position
             
@@ -76,7 +100,7 @@ class BlenderMCPServer:
             cam.data.lens = 35  
             cam.location = (x, y, z)
             
-            if name is not None:
+            if name and name.strip():
                 cam.parent = obj
                 direction = -Vector((x, y, z)).normalized()
             else:
@@ -126,19 +150,23 @@ class BlenderMCPServer:
                 try:
                     images = [Image.open(img_path) for img_path in temp_images]
                     
+                    gap_size = 10  
+                    border_size = 5   
+                    
                     width, height = images[0].size
-                    composite_width = width * 2
-                    composite_height = height * 2
+                    composite_width = width * 2 + gap_size + border_size * 2
+                    composite_height = height * 2 + gap_size + border_size * 2
                     
-                    composite = Image.new('RGB', (composite_width, composite_height))
+                    composite = Image.new('RGB', (composite_width, composite_height), color=(255, 255, 255))
                     
-                    composite.paste(images[0], (0, 0))              
-                    composite.paste(images[1], (width, 0))         
-                    composite.paste(images[2], (0, height))       
-                    composite.paste(images[3], (width, height))    
+                    composite.paste(images[0], (border_size, border_size))  
+                    composite.paste(images[1], (width + gap_size + border_size, border_size))  
+                    composite.paste(images[2], (border_size, height + gap_size + border_size))  
+                    composite.paste(images[3], (width + gap_size + border_size, height + gap_size + border_size)) 
                     
-                    current_time = datetime.now().strftime("%M%S%f")
-                    composite_path = os.path.join(output_dir, f"composite_view_{current_time}.png")
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    rand = random.randint(100, 999)
+                    composite_path = os.path.join(output_dir, f"composite_view_{timestamp}_{rand}.png")
                     composite.save(composite_path)
                     print(f"create composite img: {composite_path}")
                     
@@ -157,11 +185,13 @@ class BlenderMCPServer:
                     pass
             
             bpy.ops.object.select_all(action='DESELECT')
-            for cam in cameras:
-                cam.select_set(True)
-            bpy.ops.object.delete()
+            for obj in bpy.context.scene.objects:
+                if obj.type == 'CAMERA' and obj.name.startswith("Viewpoint_Camera_"):
+                    obj.select_set(True)
+            if bpy.context.selected_objects:
+                bpy.ops.object.delete()
         
-        return "create carema done"
+        return "save to " + composite_path
     
     def start(self):
         if self.running:
@@ -398,6 +428,13 @@ class BlenderMCPServer:
                 "materials_count": len(bpy.data.materials),
             }
             
+            total_x = 0.0
+            total_y = 0.0
+            total_z = 0.0
+            valid_objects = 0
+            
+            objects_to_process = []
+            
             # Collect minimal object information (limit to first 10 objects)
             for i, obj in enumerate(bpy.context.scene.objects):
                 if i >= 10:  # Reduced from 20 to 10
@@ -410,9 +447,34 @@ class BlenderMCPServer:
                     "location": [round(float(obj.location.x), 2), 
                                 round(float(obj.location.y), 2), 
                                 round(float(obj.location.z), 2)],
+                    "color":self.random_color_by_name(obj.name),
                 }
                 scene_info["objects"].append(obj_info)
+                
+                objects_to_process.append(obj)
+                if hasattr(obj, 'location'):
+                    total_x += obj.location.x
+                    total_y += obj.location.y
+                    total_z += obj.location.z
+                    valid_objects += 1
             
+            if valid_objects > 0:
+                center_x = total_x / valid_objects
+                center_y = total_y / valid_objects
+                center_z = total_z / valid_objects
+                scene_center = Vector((center_x, center_y, center_z))
+                scene_info["scene_center"] = [
+                    round(center_x, 2),
+                    round(center_y, 2),
+                    round(center_z, 2)
+                ]
+            else:
+                scene_center = Vector((0, 0, 0))
+                scene_info["scene_center"] = [0, 0, 0]
+            max_distance = self.calculate_farthest_point(scene_center, objects_to_process)+5 #camera distance
+            
+            scene_info["images"] = self.render_images(scene_center,"", max_distance)
+
             print(f"Scene info collected: {len(scene_info['objects'])} objects")
             return scene_info
         except Exception as e:
