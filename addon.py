@@ -11,6 +11,9 @@ import tempfile
 import traceback
 import os
 import shutil
+import random
+from PIL import Image
+from datetime import datetime
 from bpy.props import StringProperty, IntProperty, BoolProperty, EnumProperty
 
 bl_info = {
@@ -33,10 +36,32 @@ class BlenderMCPServer:
         self.socket = None
         self.server_thread = None
     
-    def render_images(self,name,distance):
-        obj = bpy.data.objects.get(name)
+    def random_color(self):
+        return (random.random(), random.uniform(0.3,0.85), random.uniform(0.3,0.85), 1.0)
+
+    def render_images(self,position,name,distance):
+        if name is not None:
+            obj = bpy.data.objects.get(name)
+            obj.color=self.random_color()  
+        else:
+            target_position=position
+            
         camera_distance=distance
-        camera_angles=[(0,-45),(0,-90),(0,-135),(90,0)]
+        camera_angles=[(30, -45),(0, -90),(-30, 225),(0,90)]
+        for area in bpy.context.screen.areas:
+            if area.type == 'VIEW_3D':
+                space = area.spaces.active
+                space.shading.type = 'SOLID'
+                space.shading.color_type = 'OBJECT'
+                space.shading.show_xray = False
+                space.shading.background_type = 'THEME'
+                space.shading.background_color = (0.1,0.1,0.1) #gray background
+                space.overlay.show_floor = True
+                space.overlay.show_axis_x = True
+                space.overlay.show_axis_y = True
+                space.overlay.show_axis_z = True
+        
+        cameras=[]
         for i, (pitch, heading) in enumerate(camera_angles):
             theta = math.radians(90 - pitch)
             phi = math.radians(heading)
@@ -47,63 +72,95 @@ class BlenderMCPServer:
             
             bpy.ops.object.camera_add()
             cam = bpy.context.object
-            cam.name = f"Camera.{i+1:03}"
+            cam.name = f"Viewpoint_Camera_{i+1}"  # special name for deleting them    
             cam.data.lens = 35  
-            
-            cam.parent = obj
-            
             cam.location = (x, y, z)
             
-            direction = -Vector((x, y, z)).normalized()
+            if name is not None:
+                cam.parent = obj
+                direction = -Vector((x, y, z)).normalized()
+            else:
+                direction = Vector(target_position) - Vector(cam.location)
+      
             rot_quat = direction.to_track_quat('-Z', 'Y')
             cam.rotation_euler = rot_quat.to_euler()
-
-        for area in bpy.context.screen.areas:
-            if area.type == 'VIEW_3D':
-                space = area.spaces.active
-                space.shading.type = 'SOLID'
-                space.shading.color_type = 'MATERIAL'
-                space.shading.show_xray = True
-                space.shading.background_type = 'VIEWPORT'
-                space.shading.background_color = (0,0,0) #black background
-                space.overlay.show_floor = False
-                space.overlay.show_axis_x = False
-                space.overlay.show_axis_y = False
-                space.overlay.show_axis_z = False
+            cameras.append(cam)
         
-        # --It is not checked in this environment yet, so Comment out this section.--
-        # --It's different way between our goal.here saving image,will change next version--
-        # output_dir = bpy.path.abspath("//viewpoint_screenshots/")
-        # os.makedirs(output_dir, exist_ok=True)
+        output_dir = bpy.path.abspath("//viewpoint_screenshots/")
+        temp_images=[]
+        try:
+            for i, cam in enumerate(cameras):
+                bpy.context.scene.camera = cam
+                
+                for area in bpy.context.window.screen.areas:
+                    if area.type == 'VIEW_3D':
+                        with bpy.context.temp_override(
+                                window=bpy.context.window,
+                                area=area,
+                                region=next(reg for reg in area.regions if reg.type == 'WINDOW'),
+                                active_object=cam  
+                        ):
+                            bpy.ops.view3d.object_as_camera()
+                        
+                        area.spaces.active.region_3d.view_perspective = 'CAMERA'
+                        break
 
-        # for i, cam in enumerate(cameras):
-        #     bpy.context.scene.camera = cam
-            
-        #     for area in bpy.context.window.screen.areas:
-        #         if area.type == 'VIEW_3D':
-        #             with bpy.context.temp_override(
-        #                     window=bpy.context.window,
-        #                     area=area,
-        #                     region=next(reg for reg in area.regions if reg.type == 'WINDOW'),
-        #                     active_object=cam  
-        #             ):
-        #                 bpy.ops.view3d.object_as_camera()
+                bpy.context.scene.render.resolution_x = 512
+                bpy.context.scene.render.resolution_y = 512
+                bpy.context.scene.render.resolution_percentage = 100
+                bpy.context.scene.render.image_settings.file_format = 'PNG'
+                bpy.context.scene.render.image_settings.color_mode = 'RGB'
+                bpy.context.scene.render.film_transparent = False
+                
+                temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+                temp_file.close()
+                temp_path = temp_file.name
+                
+                bpy.context.scene.render.filepath = temp_path
+                
+                bpy.ops.render.opengl(write_still=True)
+                temp_images.append(temp_path)
+                print(f"temp_save {i+1}: {temp_path}")
+
+            if len(temp_images) == 4:
+                try:
+                    images = [Image.open(img_path) for img_path in temp_images]
                     
-        #             area.spaces.active.region_3d.view_perspective = 'CAMERA'
-        #             break
+                    width, height = images[0].size
+                    composite_width = width * 2
+                    composite_height = height * 2
+                    
+                    composite = Image.new('RGB', (composite_width, composite_height))
+                    
+                    composite.paste(images[0], (0, 0))              
+                    composite.paste(images[1], (width, 0))         
+                    composite.paste(images[2], (0, height))       
+                    composite.paste(images[3], (width, height))    
+                    
+                    current_time = datetime.now().strftime("%M%S%f")
+                    composite_path = os.path.join(output_dir, f"composite_view_{current_time}.png")
+                    composite.save(composite_path)
+                    print(f"create composite img: {composite_path}")
+                    
+                    for img in images:
+                        img.close()
+                except Exception as e:
+                    print(f"error for composite img: {str(e)}")
+            else:
+                print("cann't composite, number is not 4.")
 
-        #     bpy.context.scene.render.resolution_x = 1920
-        #     bpy.context.scene.render.resolution_y = 1080
-        #     bpy.context.scene.render.resolution_percentage = 100
-        #     bpy.context.scene.render.image_settings.file_format = 'PNG'
-        #     bpy.context.scene.render.image_settings.color_mode = 'RGB'
-        #     bpy.context.scene.render.film_transparent = False
+        finally:
+            for temp_path in temp_images:
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
             
-        #     output_path = os.path.join(output_dir, f"viewpoint_{i+1}.png")
-        #     bpy.context.scene.render.filepath = output_path
-            
-        #     bpy.ops.render.opengl(write_still=True)
-
+            bpy.ops.object.select_all(action='DESELECT')
+            for cam in cameras:
+                cam.select_set(True)
+            bpy.ops.object.delete()
+        
         return "create carema done"
     
     def start(self):
@@ -444,32 +501,42 @@ class BlenderMCPServer:
                 obj.name = name
                 if obj.data:
                     obj.data.name = name
-                    obj["initialname"] = name
-            else:
-                obj["initialname"] = name
             
             # Set rotation mode to XYZ
-            obj.rotation_mode = 'XYZ'
+            obj.rotation_mode = 'XYZ'    
             
-            # Add custom_properties
-            # if custom_properties is not None:
-            #     if isinstance(custom_properties, str):
-            #         try:
-            #             import json
-            #             custom_properties = json.loads(custom_properties)  # 尝试解析 JSON 字符串
-            #         except json.JSONDecodeError:
-            #             raise ValueError("custom_properties 必须是字典或有效的 JSON 字符串")
-            #     elif not isinstance(custom_properties, dict):
-            #         raise TypeError("custom_properties 必须是字典类型")
+            if custom_properties is not None:
+                if isinstance(custom_properties, str):
+                    try:
+                        custom_properties = json.loads(custom_properties)
+                    except json.JSONDecodeError:
+                        raise ValueError("custom_properties must be a valid JSON string")
+                elif not isinstance(custom_properties, dict):
+                    raise TypeError("custom_properties must be a dictionary or JSON string")
+            
+            initial_props = {
+                "initialTransform": {
+                    "location": [obj.location.x, obj.location.y, obj.location.z],
+                    "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
+                    "scale": [obj.scale.x, obj.scale.y, obj.scale.z]
+                },
+                "initialName": obj.name,
+            }
+            
+            if custom_properties:
+                if isinstance(custom_properties, str):
+                    try:
+                        custom_properties = json.loads(custom_properties)
+                    except json.JSONDecodeError:
+                        raise ValueError("custom_properties must be a valid JSON string")
+                initial_props.update(custom_properties)
+            
+            for key, value in initial_props.items():
+                if isinstance(value, (dict, list)):
+                    obj[key] = json.dumps(value)
+                else:
+                    obj[key] = value 
 
-            #     for key, value in custom_properties.items():
-            #         obj[key] = value
-            # else:
-            obj["initialTransform"] = {
-                "location": [obj.location.x, obj.location.y, obj.location.z],
-                "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
-                "scale": [obj.scale.x, obj.scale.y, obj.scale.z]
-            }      
             # Patch for PLANE: scale don't work with bpy.ops.mesh.primitive_plane_add()
             if type in {"PLANE"}:
                 obj.scale = scale
@@ -502,8 +569,6 @@ class BlenderMCPServer:
         obj = bpy.data.objects.get(name)
         if not obj:
             raise ValueError(f"Object not found: {name}")
-        else:
-            obj["initialname"] = name
         
         # Modify properties as requested
         if location is not None:
@@ -521,16 +586,25 @@ class BlenderMCPServer:
         
         # Set rotation mode to XYZ
         obj.rotation_mode = 'XYZ'
-        # Add custom_properties
-        # if custom_properties:
-        #     for key, value in custom_properties.items():
-        #         obj[key] = value
-        obj["initialTransform"] = {
-                "location": [obj.location.x, obj.location.y, obj.location.z],
-                "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
-                "scale": [obj.scale.x, obj.scale.y, obj.scale.z]
-            } 
-          
+       
+        if custom_properties:
+            if isinstance(custom_properties, str):
+                try:
+                    custom_properties = json.loads(custom_properties)
+                except json.JSONDecodeError:
+                    raise ValueError("custom_properties must be a valid JSON string")
+            
+            for key, value in custom_properties.items():
+                if isinstance(value, (dict, list)):
+                    obj[key] = json.dumps(value)
+                else:
+                    obj[key] = value
+        obj["initialTransform"] = json.dumps({
+            "location": [obj.location.x, obj.location.y, obj.location.z],
+            "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
+            "scale": [obj.scale.x, obj.scale.y, obj.scale.z]
+        })
+        
         result = {
             "name": obj.name,
             "type": obj.type,
@@ -538,6 +612,7 @@ class BlenderMCPServer:
             "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
             "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
             "visible": obj.visible_get(),
+            "initialTransform": json.loads(obj["initialTransform"]),
         }
 
         if obj.type == "MESH":
@@ -596,7 +671,7 @@ class BlenderMCPServer:
                 "edges": len(mesh.edges),
                 "polygons": len(mesh.polygons),
             }
-        obj_info["images"] = self.render_images(name,5)
+        obj_info["images"] = self.render_images((obj.location.x, obj.location.y, obj.location.z),name,5)
         return obj_info
     
     def execute_code(self, code):
@@ -1660,18 +1735,14 @@ class BlenderMCPServer:
                 filepath=temp_file.name,
                 mesh_name=name
             )
-            obj["initialTransform"] = {
-                    "location": [obj.location.x, obj.location.y, obj.location.z],
-                    "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
-                    "scale": [obj.scale.x, obj.scale.y, obj.scale.z]
-                }
+            obj["initialname"] = name
+           
             result = {
                 "name": obj.name,
                 "type": obj.type,
                 "location": [obj.location.x, obj.location.y, obj.location.z],
                 "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
                 "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
-                "initialTransform": obj["initialTransform"],
             }
 
             if obj.type == "MESH":
@@ -1724,11 +1795,7 @@ class BlenderMCPServer:
                 filepath=temp_file.name,
                 mesh_name=name
             )
-            obj["initialTransform"] = {
-                "location": [obj.location.x, obj.location.y, obj.location.z],
-                "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
-                "scale": [obj.scale.x, obj.scale.y, obj.scale.z]
-            }
+            obj["initialname"] = name
             
             result = {
                 "name": obj.name,
@@ -1736,7 +1803,6 @@ class BlenderMCPServer:
                 "location": [obj.location.x, obj.location.y, obj.location.z],
                 "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
                 "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
-                "initialTransform": obj["initialTransform"],
             }
 
             if obj.type == "MESH":
