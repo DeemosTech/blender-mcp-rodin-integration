@@ -6,7 +6,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Dict, Any, List
+from typing import AsyncIterator, Dict, Any, List, Literal
 import os
 from pathlib import Path
 import base64
@@ -950,9 +950,22 @@ def asset_creation_strategy() -> str:
 
 # Main execution
 
-def main():
+def main(transport: Literal["stdio", "sse"] = "stdio"):
     """Run the MCP server"""
-    mcp.run()
+    mcp.run(transport)
 
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Start MCP with specified transport")
+    parser.add_argument(
+        "--transport",
+        type=str,
+        choices=["stdio", "sse"],
+        default="stdio",
+        help="Transport mode: 'stdio' or 'sse' (default: stdio)"
+    )
+    args = parser.parse_args()
+
+    transport = args.transport
+    main(transport)
