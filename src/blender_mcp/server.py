@@ -10,6 +10,7 @@ from typing import AsyncIterator, Dict, Any, List, Literal
 import os
 from pathlib import Path
 import base64
+import mcp.types as types
 from urllib.parse import urlparse
 
 # Configure logging
@@ -409,6 +410,34 @@ def modify_object(
         logger.error(f"Error modifying object: {str(e)}")
         return f"Error modifying object: {str(e)}"
 
+@mcp.tool()
+def load_image(ctx: Context, filepath: str) -> str:
+    """
+    Load an image file into chat context.
+    
+    Parameters:
+    - filepath: Path to the image file
+    """
+    return Image(path=filepath)
+
+@mcp.tool()
+def duplicate_object(ctx: Context,name: str) -> str:
+    """
+    Duplicate an object in the Blender scene.
+    
+    Parameters:
+    - name: Name of the object to duplicate
+    """
+    try:
+        # Get the global connection
+        blender = get_blender_connection()
+        params = {"name": name}
+        result = blender.send_command("duplicate_object", params)
+        return f"Duplicated object: {result['name']}"
+    except Exception as e:
+        logger.error(f"Error duplicating object: {str(e)}")
+        return f"Error duplicating object: {str(e)}"    
+    
 @mcp.tool()
 def delete_object(ctx: Context, name: str) -> str:
     """

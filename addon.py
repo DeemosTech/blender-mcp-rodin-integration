@@ -36,6 +36,23 @@ class BlenderMCPServer:
         self.socket = None
         self.server_thread = None
     
+    def duplicate_object(self, name):
+        # Find the object by name
+        obj = bpy.data.objects.get(name)
+        if not obj:
+            raise ValueError(f"Object not found: {name}")
+        
+        new_obj = obj.copy()
+        new_obj.data = obj.data.copy()
+        
+        bpy.context.collection.objects.link(new_obj)
+        new_obj.name = obj.name + "_copy"
+        
+        result = {
+            "name": new_obj.name,
+        }
+        return result
+    
     def random_color(self):
         return (random.random(), random.uniform(0.3,0.85), random.uniform(0.3,0.85), 1.0)
 
@@ -60,7 +77,7 @@ class BlenderMCPServer:
                     max_distance = distance            
         return max_distance    
     
-    def render_images(self,position,name,distance):
+    def render_images(self, position, name, distance):
         if name and name.strip():
             try:
                 obj = bpy.data.objects[name]  
@@ -68,10 +85,11 @@ class BlenderMCPServer:
             except KeyError:
                 print(f"Error: Object '{name}' not found in scene!")  
         else:
-            target_position=position
+            target_position = position
             
-        camera_distance=distance
-        camera_angles=[(30, -45),(0, -90),(-30, 225),(0,90)]
+        camera_distance = distance
+        camera_angles = [(30, -45), (0, -90), (-30, 225), (0, 90)]
+        
         for area in bpy.context.screen.areas:
             if area.type == 'VIEW_3D':
                 space = area.spaces.active
@@ -79,13 +97,13 @@ class BlenderMCPServer:
                 space.shading.color_type = 'OBJECT'
                 space.shading.show_xray = False
                 space.shading.background_type = 'THEME'
-                space.shading.background_color = (0.1,0.1,0.1) #gray background
+                space.shading.background_color = (0.1, 0.1, 0.1)  # gray background
                 space.overlay.show_floor = True
                 space.overlay.show_axis_x = True
                 space.overlay.show_axis_y = True
                 space.overlay.show_axis_z = True
         
-        cameras=[]
+        cameras = []
         for i, (pitch, heading) in enumerate(camera_angles):
             theta = math.radians(90 - pitch)
             phi = math.radians(heading)
@@ -96,7 +114,7 @@ class BlenderMCPServer:
             
             bpy.ops.object.camera_add()
             cam = bpy.context.object
-            cam.name = f"Viewpoint_Camera_{i+1}"  # special name for deleting them    
+            cam.name = f"Viewpoint_Camera_{i+1}" # special name for deleting them
             cam.data.lens = 35  
             cam.location = (x, y, z)
             
@@ -105,13 +123,16 @@ class BlenderMCPServer:
                 direction = -Vector((x, y, z)).normalized()
             else:
                 direction = Vector(target_position) - Vector(cam.location)
-      
+    
             rot_quat = direction.to_track_quat('-Z', 'Y')
             cam.rotation_euler = rot_quat.to_euler()
             cameras.append(cam)
         
-        output_dir = bpy.path.abspath("//viewpoint_screenshots/")
-        temp_images=[]
+        temp_dir = bpy.app.tempdir
+        output_dir = os.path.join(temp_dir, "viewpoint_screenshots")
+        os.makedirs(output_dir, exist_ok=True)
+        
+        temp_images = []
         try:
             for i, cam in enumerate(cameras):
                 bpy.context.scene.camera = cam
@@ -136,10 +157,7 @@ class BlenderMCPServer:
                 bpy.context.scene.render.image_settings.color_mode = 'RGB'
                 bpy.context.scene.render.film_transparent = False
                 
-                temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
-                temp_file.close()
-                temp_path = temp_file.name
-                
+                temp_path = os.path.join(temp_dir, f"temp_view_{i}.png")
                 bpy.context.scene.render.filepath = temp_path
                 
                 bpy.ops.render.opengl(write_still=True)
@@ -191,7 +209,7 @@ class BlenderMCPServer:
             if bpy.context.selected_objects:
                 bpy.ops.object.delete()
         
-        return "save to " + composite_path
+        return composite_path
     
     def start(self):
         if self.running:
@@ -339,7 +357,7 @@ class BlenderMCPServer:
             params = command.get("params", {})
             
             # Ensure we're in the right context
-            if cmd_type in ["create_object", "modify_object", "delete_object"]:
+            if cmd_type in ["create_object", "modify_object","duplicate_object", "delete_object"]:
                 override = bpy.context.copy()
                 override['area'] = [area for area in bpy.context.screen.areas if area.type == 'VIEW_3D'][0]
                 with bpy.context.temp_override(**override):
@@ -372,6 +390,7 @@ class BlenderMCPServer:
             "set_material": self.set_material,
             "get_polyhaven_status": self.get_polyhaven_status,
             "get_hyper3d_status": self.get_hyper3d_status,
+            "duplicate_object": self.duplicate_object,
         }
         
         # Add Polyhaven handlers only if enabled
