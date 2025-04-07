@@ -405,7 +405,7 @@ def modify_object(
             params["custom_properties"] = custom_properties
                
         result = blender.send_command("modify_object", params)
-        return f"Modified object: {result['name']}"
+        return f"Modified object: { {'name': result['name'], 'save_image': result['images']} }"
     except Exception as e:
         logger.error(f"Error modifying object: {str(e)}")
         return f"Error modifying object: {str(e)}"

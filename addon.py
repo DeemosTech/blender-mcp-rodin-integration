@@ -102,31 +102,24 @@ class BlenderMCPServer:
                 space.overlay.show_axis_x = True
                 space.overlay.show_axis_y = True
                 space.overlay.show_axis_z = True
-        
-        cameras = []
-        for i, (pitch, heading) in enumerate(camera_angles):
-            theta = math.radians(90 - pitch)
-            phi = math.radians(heading)
-            
-            x = camera_distance * math.sin(theta) * math.cos(phi)
-            y = camera_distance * math.sin(theta) * math.sin(phi)
-            z = camera_distance * math.cos(theta)
-            
-            bpy.ops.object.camera_add()
-            cam = bpy.context.object
-            cam.name = f"Viewpoint_Camera_{i+1}" # special name for deleting them
-            cam.data.lens = 35  
-            cam.location = (x, y, z)
-            
-            if name and name.strip():
-                cam.parent = obj
-                direction = -Vector((x, y, z)).normalized()
-            else:
-                direction = Vector(target_position) - Vector(cam.location)
-    
-            rot_quat = direction.to_track_quat('-Z', 'Y')
-            cam.rotation_euler = rot_quat.to_euler()
-            cameras.append(cam)
+                
+        cam_name = "Viewpoint_Camera_Movable"
+        if cam_name in bpy.data.objects:
+            cam = bpy.data.objects[cam_name]
+            cam.data.lens = 35
+            cam.data.clip_end=10
+        else:
+            try:
+                bpy.ops.object.camera_add()
+                cam = bpy.context.active_object
+                if cam is None or cam.type != 'CAMERA':
+                    raise RuntimeError("Failed to create camera")
+                cam.name = cam_name
+                cam.data.lens = 35
+                cam.data.clip_end=10
+            except Exception as e:
+                print(f"Failed to create camera: {str(e)}")
+                raise
         
         temp_dir = bpy.app.tempdir
         output_dir = os.path.join(temp_dir, "viewpoint_screenshots")
@@ -134,22 +127,31 @@ class BlenderMCPServer:
         
         temp_images = []
         try:
-            for i, cam in enumerate(cameras):
+            for i, (pitch, heading) in enumerate(camera_angles):
+                theta = math.radians(90 - pitch)
+                phi = math.radians(heading)
+                
+                x = camera_distance * math.sin(theta) * math.cos(phi)
+                y = camera_distance * math.sin(theta) * math.sin(phi)
+                z = camera_distance * math.cos(theta)
+                
+                cam.location = (x, y, z)
+                
+                if name and name.strip():
+                    direction = -Vector((x, y, z)).normalized()
+                else:
+                    direction = Vector(target_position) - Vector(cam.location)
+                
+                rot_quat = direction.to_track_quat('-Z', 'Y')
+                cam.rotation_euler = rot_quat.to_euler()
+                
                 bpy.context.scene.camera = cam
                 
                 for area in bpy.context.window.screen.areas:
                     if area.type == 'VIEW_3D':
-                        with bpy.context.temp_override(
-                                window=bpy.context.window,
-                                area=area,
-                                region=next(reg for reg in area.regions if reg.type == 'WINDOW'),
-                                active_object=cam  
-                        ):
-                            bpy.ops.view3d.object_as_camera()
-                        
                         area.spaces.active.region_3d.view_perspective = 'CAMERA'
                         break
-
+                
                 bpy.context.scene.render.resolution_x = 384
                 bpy.context.scene.render.resolution_y = 384
                 bpy.context.scene.render.resolution_percentage = 100
@@ -162,8 +164,8 @@ class BlenderMCPServer:
                 
                 bpy.ops.render.opengl(write_still=True)
                 temp_images.append(temp_path)
-                print(f"temp_save {i+1}: {temp_path}")
-
+                print(f"Rendered view {i+1}: {temp_path}")
+            
             if len(temp_images) == 4:
                 try:
                     images = [Image.open(img_path) for img_path in temp_images]
@@ -196,19 +198,18 @@ class BlenderMCPServer:
                 print("cann't composite, number is not 4.")
 
         finally:
+            for area in bpy.context.window.screen.areas:
+                if area.type == 'VIEW_3D':
+                    area.spaces.active.region_3d.view_perspective = 'PERSP'
+                    break
             for temp_path in temp_images:
                 try:
-                    os.unlink(temp_path)
-                except:
-                    pass
-            
-            bpy.ops.object.select_all(action='DESELECT')
-            for obj in bpy.context.scene.objects:
-                if obj.type == 'CAMERA' and obj.name.startswith("Viewpoint_Camera_"):
-                    obj.select_set(True)
-            if bpy.context.selected_objects:
-                bpy.ops.object.delete()
-        
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                except Exception as e:
+                    print(f"Error deleting temporary file {temp_path}: {str(e)}")
+
+                
         return composite_path
     
     def start(self):
@@ -685,6 +686,7 @@ class BlenderMCPServer:
             "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
             "scale": [obj.scale.x, obj.scale.y, obj.scale.z]
         })
+        obj["images"] = self.render_images((obj.location.x, obj.location.y, obj.location.z), name, 5)
         
         result = {
             "name": obj.name,
@@ -694,12 +696,12 @@ class BlenderMCPServer:
             "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
             "visible": obj.visible_get(),
             "initialTransform": json.loads(obj["initialTransform"]),
+            "images": obj["images"],
         }
 
         if obj.type == "MESH":
             bounding_box = self._get_aabb(obj)
             result["world_bounding_box"] = bounding_box
-
         return result
 
     def delete_object(self, name):
@@ -752,7 +754,7 @@ class BlenderMCPServer:
                 "edges": len(mesh.edges),
                 "polygons": len(mesh.polygons),
             }
-        obj_info["images"] = self.render_images((obj.location.x, obj.location.y, obj.location.z),name,5)
+        # obj_info["images"] = self.render_images((obj.location.x, obj.location.y, obj.location.z),name,5)
         return obj_info
     
     def execute_code(self, code):
