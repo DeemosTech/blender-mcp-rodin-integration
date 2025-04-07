@@ -150,8 +150,8 @@ class BlenderMCPServer:
                         area.spaces.active.region_3d.view_perspective = 'CAMERA'
                         break
 
-                bpy.context.scene.render.resolution_x = 512
-                bpy.context.scene.render.resolution_y = 512
+                bpy.context.scene.render.resolution_x = 384
+                bpy.context.scene.render.resolution_y = 384
                 bpy.context.scene.render.resolution_percentage = 100
                 bpy.context.scene.render.image_settings.file_format = 'PNG'
                 bpy.context.scene.render.image_settings.color_mode = 'RGB'
