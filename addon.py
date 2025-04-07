@@ -108,9 +108,9 @@ class BlenderMCPServer:
             cam = bpy.data.objects[cam_name]
             cam.data.lens = 35
             if name and name.strip():
-                cam.data.clip_end=10
+                cam.data.clip_start=distance*(2/5)
             else:
-                cam.data.clip_end=1000
+                cam.data.clip_start=distance*(2/3)
         else:
             try:
                 bpy.ops.object.camera_add()
@@ -120,9 +120,9 @@ class BlenderMCPServer:
                 cam.name = cam_name
                 cam.data.lens = 35
                 if name and name.strip():
-                    cam.data.clip_end=10
+                    cam.data.clip_start=distance*(2/5)
                 else:
-                    cam.data.clip_end=1000
+                    cam.data.clip_start=distance*(2/3)
             except Exception as e:
                 print(f"Failed to create camera: {str(e)}")
                 raise
