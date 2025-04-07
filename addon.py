@@ -82,6 +82,7 @@ class BlenderMCPServer:
             try:
                 obj = bpy.data.objects[name]  
                 obj.color = self.random_color()
+                target_position = obj.location
             except KeyError:
                 print(f"Error: Object '{name}' not found in scene!")  
         else:
@@ -143,10 +144,7 @@ class BlenderMCPServer:
                 
                 cam.location = (x, y, z)
                 
-                if name and name.strip():
-                    direction = -Vector((x, y, z)).normalized()
-                else:
-                    direction = Vector(target_position) - Vector(cam.location)
+                direction = Vector(target_position) - Vector(cam.location)
                 
                 rot_quat = direction.to_track_quat('-Z', 'Y')
                 cam.rotation_euler = rot_quat.to_euler()
