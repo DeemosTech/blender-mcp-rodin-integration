@@ -267,7 +267,30 @@ def get_object_info(ctx: Context, object_name: str) -> str:
         logger.error(f"Error getting object info from Blender: {str(e)}")
         return f"Error getting object info: {str(e)}"
 
-
+@mcp.tool()
+def get_around_objects(ctx: Context, object_name: str, distance_multiplier: float = 1.0) -> dict:
+    """
+    Get objects around a specific object in the Blender scene.
+    
+    Parameters:
+    - object_name: The name of the object to get objects around
+    - distance_multiplier: Multiplier for detection range (default: 1.0)
+    """
+    try:
+        blender = get_blender_connection()
+        result = blender.send_command("get_around_objects", {
+            "name": object_name,
+            "distance_multiplier": distance_multiplier
+        })
+        
+        # Return the result directly as a dictionary
+        return result
+    except Exception as e:
+        logger.error(f"Error getting objects around object from Blender: {str(e)}")
+        return {
+            "error": str(e),
+            "success": False
+        }
 
 @mcp.tool()
 def create_object(

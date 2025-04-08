@@ -36,8 +36,63 @@ class BlenderMCPServer:
         self.socket = None
         self.server_thread = None
     
+    def nearby_objects(self, name, distance_multiplier=1.0):
+        # Identifying objects in proximity to the specified object
+        target_obj = bpy.data.objects.get(name)
+        if not target_obj:
+            return {
+                "error": f"Cannot find object named '{name}'",
+                "success": False
+            }
+        
+        bbox_corners = [target_obj.matrix_world @ mathutils.Vector(corner) 
+                for corner in target_obj.bound_box]
+    
+        min_corner = bbox_corners[0].copy()
+        max_corner = bbox_corners[0].copy()
+        
+        for corner in bbox_corners[1:]:
+            min_corner.x = min(min_corner.x, corner.x)
+            min_corner.y = min(min_corner.y, corner.y)
+            min_corner.z = min(min_corner.z, corner.z)
+            
+            max_corner.x = max(max_corner.x, corner.x)
+            max_corner.y = max(max_corner.y, corner.y)
+            max_corner.z = max(max_corner.z, corner.z)
+        
+        bbox_size = max_corner - min_corner
+        expanded_min = min_corner - bbox_size * distance_multiplier
+        expanded_max = max_corner + bbox_size * distance_multiplier
+        target_bbox = (expanded_min, expanded_max)
+        
+        intersecting_objects = []
+        for obj in bpy.context.scene.objects:
+            if obj == target_obj or obj.type != 'MESH':
+                continue
+                
+            obj_bbox_corners = [obj.matrix_world @ mathutils.Vector(corner) 
+                            for corner in obj.bound_box]
+            
+            obj_min = obj_bbox_corners[0].copy()
+            obj_max = obj_bbox_corners[0].copy()
+            
+            for corner in obj_bbox_corners[1:]:
+                obj_min.x = min(obj_min.x, corner.x)
+                obj_min.y = min(obj_min.y, corner.y)
+                obj_min.z = min(obj_min.z, corner.z)
+                
+                obj_max.x = max(obj_max.x, corner.x)
+                obj_max.y = max(obj_max.y, corner.y)
+                obj_max.z = max(obj_max.z, corner.z)
+            
+            if (obj_max.x > target_bbox[0].x and obj_min.x < target_bbox[1].x and
+                obj_max.y > target_bbox[0].y and obj_min.y < target_bbox[1].y and
+                obj_max.z > target_bbox[0].z and obj_min.z < target_bbox[1].z):
+                intersecting_objects.append(obj.name)
+        
+        return intersecting_objects
+              
     def duplicate_object(self, name):
-        # Find the object by name
         obj = bpy.data.objects.get(name)
         if not obj:
             raise ValueError(f"Object not found: {name}")
@@ -729,6 +784,8 @@ class BlenderMCPServer:
         if not obj:
             raise ValueError(f"Object not found: {name}")
         
+        nearby_objects = self.nearby_objects(name)
+        
         # Basic object info
         obj_info = {
             "name": obj.name,
@@ -738,7 +795,7 @@ class BlenderMCPServer:
             "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
             "visible": obj.visible_get(),
             "materials": [],
-            "images": [],
+            "nearby_objects": nearby_objects
         }
 
         if obj.type == "MESH":
