@@ -1,5 +1,4 @@
 import bpy
-from mathutils import Vector
 import math
 import mathutils
 import json
@@ -13,6 +12,7 @@ import os
 import shutil
 import random
 from PIL import Image
+from mathutils import Vector, Color 
 from datetime import datetime
 from bpy.props import StringProperty, IntProperty, BoolProperty, EnumProperty
 
@@ -35,15 +35,14 @@ class BlenderMCPServer:
         self.running = False
         self.socket = None
         self.server_thread = None
+        self.used_colors = []
+        self.min_hue_diff = 0.3
     
     def nearby_objects(self, name, distance_multiplier=1.0):
         # Identifying objects in proximity to the specified object
         target_obj = bpy.data.objects.get(name)
         if not target_obj:
-            return {
-                "error": f"Cannot find object named '{name}'",
-                "success": False
-            }
+            return []
         
         bbox_corners = [target_obj.matrix_world @ mathutils.Vector(corner) 
                 for corner in target_obj.bound_box]
@@ -92,30 +91,79 @@ class BlenderMCPServer:
         
         return intersecting_objects
               
-    def duplicate_object(self, name):
-        obj = bpy.data.objects.get(name)
-        if not obj:
-            raise ValueError(f"Object not found: {name}")
-        
-        new_obj = obj.copy()
-        new_obj.data = obj.data.copy()
-        
-        bpy.context.collection.objects.link(new_obj)
-        new_obj.name = obj.name + "_copy"
-        
-        result = {
-            "name": new_obj.name,
-        }
-        return result
-    
     def random_color(self):
+        """Generate a random, distinct color."""
+        attempts = 0
+        max_attempts = 50
+        
+        while attempts < max_attempts:
+            hue = random.random()
+            saturation = random.uniform(0.6, 0.9)
+            value = random.uniform(0.6, 0.9)
+            
+            color = Color()
+            color.hsv = (hue, saturation, value)
+            new_color = (color.r, color.g, color.b, 1.0)
+            
+            if not self.used_colors or self.is_color_different_enough(new_color):
+                self.used_colors.append(new_color)
+                return new_color
+            
+            attempts += 1
+            
+        if len(self.used_colors) > 100:
+            self.used_colors.pop(0)
         return (random.random(), random.uniform(0.3,0.85), random.uniform(0.3,0.85), 1.0)
-
-    def random_color_by_name(self,name):
-        obj = bpy.data.objects.get(name)
-        color=obj.color=self.random_color()
-        return color
     
+    def is_color_different_enough(self, new_color):
+        """check difference between new color and used colors"""
+        new_color_hsv = Color((new_color[0], new_color[1], new_color[2])).hsv
+        
+        for used_color in self.used_colors:
+            used_color_hsv = Color((used_color[0], used_color[1], used_color[2])).hsv
+            hue_diff = min(
+                abs(new_color_hsv[0] - used_color_hsv[0]),
+                1 - abs(new_color_hsv[0] - used_color_hsv[0])
+            )
+            if hue_diff < self.min_hue_diff:
+                return False
+        return True
+    
+    def random_color_by_name(self, name):
+        try:
+            """Force a new color for the object ( regardless of existing color )"""
+            obj = bpy.data.objects.get(name)
+            if not obj:
+                return None
+            
+            nearby_colors = []
+            for nearby_name in self.nearby_objects(name, distance_multiplier=1.5):
+                nearby_obj = bpy.data.objects.get(nearby_name)
+                if nearby_obj and hasattr(nearby_obj, 'color'):
+                    nearby_colors.append(nearby_obj.color[:3])
+            
+            for _ in range(50):
+                color = self.random_color()
+                if all(self.color_distance(color[:3], nc) >= 0.3 for nc in nearby_colors):
+                    return color
+            
+            return self.random_color()
+        except Exception as e:
+            print(f"Error generating color for {name}: {str(e)}")
+            return (0.8, 0.8, 0.8, 1.0)
+        
+    def color_distance(self, color1, color2):
+        """Calculate the difference between two colors."""
+        # HSV more suitable for color distance
+        hsv1 = Color(color1).hsv
+        hsv2 = Color(color2).hsv
+
+        hue_diff = min(abs(hsv1[0] - hsv2[0]), 1 - abs(hsv1[0] - hsv2[0]))
+        sat_diff = abs(hsv1[1] - hsv2[1])
+        val_diff = abs(hsv1[2] - hsv2[2])
+
+        return 0.6 * hue_diff + 0.2 * sat_diff + 0.2 * val_diff
+
     def calculate_farthest_point(self,center, objects):
         """Calculate the farthest point from center using bounding boxes"""
         max_distance = 0
@@ -229,8 +277,8 @@ class BlenderMCPServer:
                 try:
                     images = [Image.open(img_path) for img_path in temp_images]
                     
-                    gap_size = 10  
-                    border_size = 5   
+                    gap_size = 3  
+                    border_size = 3   
                     
                     width, height = images[0].size
                     composite_width = width * 2 + gap_size + border_size * 2
@@ -514,28 +562,29 @@ class BlenderMCPServer:
             
             objects_to_process = []
             
-            # Collect minimal object information (limit to first 10 objects)
             for i, obj in enumerate(bpy.context.scene.objects):
-                if i >= 10:  # Reduced from 20 to 10
-                    break
-                    
-                obj_info = {
-                    "name": obj.name,
-                    "type": obj.type,
-                    # Only include basic location data
-                    "location": [round(float(obj.location.x), 2), 
-                                round(float(obj.location.y), 2), 
-                                round(float(obj.location.z), 2)],
-                    "color":self.random_color_by_name(obj.name),
-                }
-                scene_info["objects"].append(obj_info)
+                new_color = self.random_color_by_name(obj.name)
+                obj.color = new_color
                 
-                objects_to_process.append(obj)
-                if hasattr(obj, 'location'):
-                    total_x += obj.location.x
-                    total_y += obj.location.y
-                    total_z += obj.location.z
-                    valid_objects += 1
+                # Collect minimal object information (limit to first 10 objects)
+                if i < 10:
+                    
+                    obj_info = {
+                        "name": obj.name,
+                        "type": obj.type,
+                        "location": [round(float(obj.location.x), 2), 
+                                    round(float(obj.location.y), 2), 
+                                    round(float(obj.location.z), 2)],
+                        "color":new_color,
+                    }
+                    scene_info["objects"].append(obj_info)
+                    
+                    objects_to_process.append(obj)
+                    if hasattr(obj, 'location'):
+                        total_x += obj.location.x
+                        total_y += obj.location.y
+                        total_z += obj.location.z
+                        valid_objects += 1
             
             if valid_objects > 0:
                 center_x = total_x / valid_objects
@@ -763,6 +812,22 @@ class BlenderMCPServer:
             result["world_bounding_box"] = bounding_box
         return result
 
+    def duplicate_object(self, name):
+            obj = bpy.data.objects.get(name)
+            if not obj:
+                raise ValueError(f"Object not found: {name}")
+            
+            new_obj = obj.copy()
+            new_obj.data = obj.data.copy()
+            
+            bpy.context.collection.objects.link(new_obj)
+            new_obj.name = obj.name + "_copy"
+            
+            result = {
+                "name": new_obj.name,
+            }
+            return result
+        
     def delete_object(self, name):
         """Delete an object from the scene"""
         obj = bpy.data.objects.get(name)
