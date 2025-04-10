@@ -180,19 +180,72 @@ class BlenderMCPServer:
                     max_distance = distance            
         return max_distance    
     
-    def render_images(self, position, name, distance):
+    def calculate_distance_from_object(self,obj):
+        """Calculate the recommended distance (half of the longest side) based on the object's bounding box."""
+        bbox_corners = [obj.matrix_world @ Vector(corner) for corner in obj.bound_box]
+        
+        min_x = min(c.x for c in bbox_corners)
+        max_x = max(c.x for c in bbox_corners)
+        min_y = min(c.y for c in bbox_corners)
+        max_y = max(c.y for c in bbox_corners)
+        min_z = min(c.z for c in bbox_corners)
+        max_z = max(c.z for c in bbox_corners)
+        
+        size_x = max_x - min_x
+        size_y = max_y - min_y
+        size_z = max_z - min_z
+        
+        return max(size_x, size_y, size_z)*1.6
+    
+    def get_ortho_scale(self,distance, margin_factor=1.2):
+        """Calculate ortho_scale dynamically based on the distance (furthest distance)."""
+        return distance * margin_factor
+    
+    def create_movable_camera(self,distance,name):
+        "'create single movable camera'"
+        if "Viewpoint_Camera_Movable" in bpy.data.objects:
+            cam = bpy.data.objects["Viewpoint_Camera_Movable"]
+            print("Found existing camera, reusing it")
+        else:
+            bpy.ops.object.camera_add()
+            cam = bpy.context.active_object
+            cam.name = "Viewpoint_Camera_Movable"
+            cam.data.type = 'ORTHO'
+            print("Created new camera")
+
+        bpy.context.view_layer.objects.active = cam
+        cam.select_set(True)
+        
+        cam.data.ortho_scale = self.get_ortho_scale(distance)
+        
+        if name and name.strip():
+            cam.data.clip_start = distance * 0.4
+        else:
+            cam.data.clip_start = distance * 0.666
+        
+        return cam
+    
+    def render_images(self, position, name,scene_distance):
         if name and name.strip():
             try:
-                obj = bpy.data.objects[name]  
+                #find and highlight
+                obj = bpy.data.objects[name]
+                bpy.context.view_layer.objects.active = obj
+                obj.select_set(True)
+                  
                 obj.color = self.random_color()
                 target_position = obj.location
+                distance=self.calculate_distance_from_object(obj)
+                print(f"Found object '{name}', position: {target_position}, auto distance: {distance:.2f}")
             except KeyError:
-                print(f"Error: Object '{name}' not found in scene!")  
+                print(f"Error: Object '{name}' not found in scene! Using default position.")
+                target_position = position
+                distance = 5  #not found obj 
         else:
+            bpy.ops.object.select_all(action='DESELECT')
             target_position = position
-            
-        camera_distance = distance
-        camera_angles = [(30, -45), (0, -90), (-30, 225), (0, 90)]
+            distance = scene_distance  #get scne distance
+            print(f"position: {target_position}, auto distance: {distance:.2f}")
         
         for area in bpy.context.screen.areas:
             if area.type == 'VIEW_3D':
@@ -207,52 +260,47 @@ class BlenderMCPServer:
                 space.overlay.show_axis_y = True
                 space.overlay.show_axis_z = True
                 
-        cam_name = "Viewpoint_Camera_Movable"
-        if cam_name in bpy.data.objects:
-            cam = bpy.data.objects[cam_name]
-            cam.data.lens = 35
-            if name and name.strip():
-                cam.data.clip_start=distance*(2/5)
-            else:
-                cam.data.clip_start=distance*(2/3)
-        else:
-            try:
-                bpy.ops.object.camera_add()
-                cam = bpy.context.active_object
-                if cam is None or cam.type != 'CAMERA':
-                    raise RuntimeError("Failed to create camera")
-                cam.name = cam_name
-                cam.data.lens = 35
-                if name and name.strip():
-                    cam.data.clip_start=distance*(2/5)
-                else:
-                    cam.data.clip_start=distance*(2/3)
-            except Exception as e:
-                print(f"Failed to create camera: {str(e)}")
-                raise
-        
         temp_dir = bpy.app.tempdir
         output_dir = os.path.join(temp_dir, "viewpoint_screenshots")
         os.makedirs(output_dir, exist_ok=True)
         
+        views = [
+            {
+                "name": "Front",
+                "location": (target_position[0], target_position[1] - distance, target_position[2]),
+                "rotation": (1.5708, 0, 0),
+                "ortho_scale": self.get_ortho_scale(distance)
+            },
+            {
+                "name": "Front_Angle",
+                "location": (target_position[0] + distance*0.7, target_position[1] - distance*0.7, target_position[2] + distance),
+                "rotation": (0.785398, 0, 0.785398),
+                "ortho_scale": self.get_ortho_scale(distance)
+            },
+            {
+                "name": "Back",
+                "location": (target_position[0], target_position[1] + distance, target_position[2]),
+                "rotation": (1.5708, 0, 3.14159),
+                "ortho_scale": self.get_ortho_scale(distance)
+            },
+            {
+                "name": "Top",
+                "location": (target_position[0], target_position[1], target_position[2] + distance),
+                "rotation": (0, 0, 0),
+                "ortho_scale": self.get_ortho_scale(distance)
+            }
+        ]
+        
+        camera = self.create_movable_camera(distance,name)
         temp_images = []
+        composite_path=None
         try:
-            for i, (pitch, heading) in enumerate(camera_angles):
-                theta = math.radians(90 - pitch)
-                phi = math.radians(heading)
+            for i, view in enumerate(views):
+                camera.location = view["location"]
+                camera.rotation_euler = view["rotation"]
+                camera.data.ortho_scale = view["ortho_scale"]
                 
-                x = camera_distance * math.sin(theta) * math.cos(phi)
-                y = camera_distance * math.sin(theta) * math.sin(phi)
-                z = camera_distance * math.cos(theta)
-                
-                cam.location = (x, y, z)
-                
-                direction = Vector(target_position) - Vector(cam.location)
-                
-                rot_quat = direction.to_track_quat('-Z', 'Y')
-                cam.rotation_euler = rot_quat.to_euler()
-                
-                bpy.context.scene.camera = cam
+                bpy.context.scene.camera = camera
                 
                 for area in bpy.context.window.screen.areas:
                     if area.type == 'VIEW_3D':
@@ -269,15 +317,22 @@ class BlenderMCPServer:
                 temp_path = os.path.join(temp_dir, f"temp_view_{i}.png")
                 bpy.context.scene.render.filepath = temp_path
                 
-                bpy.ops.render.opengl(write_still=True)
-                temp_images.append(temp_path)
-                print(f"Rendered view {i+1}: {temp_path}")
+                try:
+                    bpy.ops.render.opengl(write_still=True)
+                    if os.path.exists(temp_path):
+                        temp_images.append(temp_path)
+                        print(f"Rendered view {i+1}: {temp_path}")
+                    else:
+                        print(f"Render failed for view {i+1}")
+                except Exception as e:
+                    print(f"Render failed for view {i+1}: {str(e)}")
+
             
             if len(temp_images) == 4:
                 try:
                     images = [Image.open(img_path) for img_path in temp_images]
                     
-                    gap_size = 3  
+                    gap_size = 2 
                     border_size = 3   
                     
                     width, height = images[0].size
@@ -286,37 +341,35 @@ class BlenderMCPServer:
                     
                     composite = Image.new('RGB', (composite_width, composite_height), color=(255, 255, 255))
                     
-                    composite.paste(images[0], (border_size, border_size))  
-                    composite.paste(images[1], (width + gap_size + border_size, border_size))  
-                    composite.paste(images[2], (border_size, height + gap_size + border_size))  
-                    composite.paste(images[3], (width + gap_size + border_size, height + gap_size + border_size)) 
+                    composite.paste(images[0], (border_size, border_size))
+                    composite.paste(images[1], (width + gap_size + border_size, border_size))
+                    composite.paste(images[2], (border_size, height + gap_size + border_size))
+                    composite.paste(images[3], (width + gap_size + border_size, height + gap_size + border_size))
                     
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     rand = random.randint(100, 999)
                     composite_path = os.path.join(output_dir, f"composite_view_{timestamp}_{rand}.png")
                     composite.save(composite_path)
-                    print(f"create composite img: {composite_path}")
+                    print(f"Created composite image: {composite_path}")
                     
                     for img in images:
                         img.close()
                 except Exception as e:
-                    print(f"error for composite img: {str(e)}")
+                    print(f"Error creating composite image: {str(e)}")
             else:
-                print("cann't composite, number is not 4.")
+                print(f"Cannot create composite, only {len(temp_images)} images available (need 4).")
 
         finally:
             for area in bpy.context.window.screen.areas:
                 if area.type == 'VIEW_3D':
                     area.spaces.active.region_3d.view_perspective = 'PERSP'
                     break
-            for temp_path in temp_images:
+            for temp_img in temp_images:
                 try:
-                    if os.path.exists(temp_path):
-                        os.unlink(temp_path)
-                except Exception as e:
-                    print(f"Error deleting temporary file {temp_path}: {str(e)}")
+                    os.remove(temp_img)
+                except:
+                    pass
 
-                
         return composite_path
     
     def start(self):
@@ -599,7 +652,7 @@ class BlenderMCPServer:
             else:
                 scene_center = Vector((0, 0, 0))
                 scene_info["scene_center"] = [0, 0, 0]
-            max_distance = self.calculate_farthest_point(scene_center, objects_to_process)+5 #camera distance
+            max_distance = self.calculate_farthest_point(scene_center, objects_to_process) #camera distance
             
             scene_info["images"] = self.render_images(scene_center,"", max_distance)
 
@@ -880,7 +933,7 @@ class BlenderMCPServer:
                 "edges": len(mesh.edges),
                 "polygons": len(mesh.polygons),
             }
-        # obj_info["images"] = self.render_images((obj.location.x, obj.location.y, obj.location.z),name,5)
+        obj_info["images"] = self.render_images((obj.location.x, obj.location.y, obj.location.z),name,5)
         return obj_info
     
     def execute_code(self, code):
