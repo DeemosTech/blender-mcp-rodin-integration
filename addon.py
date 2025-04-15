@@ -201,6 +201,19 @@ class BlenderMCPServer:
         """Calculate ortho_scale dynamically based on the distance (furthest distance)."""
         return distance * margin_factor
     
+    def calculate_perspective_camera_position(self, target_position, distance, angle=45):
+        """Calculate optimal perspective camera position to center the object"""
+        angle_rad = math.radians(angle)
+        
+        offset = distance * math.cos(angle_rad)
+        height = distance * math.sin(angle_rad)
+        
+        return (
+            target_position[0] + offset,
+            target_position[1] - offset,
+            target_position[2] + height
+        )
+        
     def create_movable_camera(self,distance,name):
         "'create single movable camera'"
         if "Viewpoint_Camera_Movable" in bpy.data.objects:
@@ -269,25 +282,30 @@ class BlenderMCPServer:
                 "name": "Front",
                 "location": (target_position[0], target_position[1] - distance, target_position[2]),
                 "rotation": (1.5708, 0, 0),
-                "ortho_scale": self.get_ortho_scale(distance)
+                "ortho_scale": self.get_ortho_scale(distance),
+                "camera_type": "ORTHO"
             },
             {
                 "name": "Front_Angle",
-                "location": (target_position[0] + distance*0.7, target_position[1] - distance*0.7, target_position[2] + distance),
-                "rotation": (0.785398, 0, 0.785398),
-                "ortho_scale": self.get_ortho_scale(distance)
+                "location": self.calculate_perspective_camera_position(target_position, distance),
+                "rotation": (math.radians(30), 0, math.radians(45)),  # 30度俯角，45度水平旋转
+                "fov": 45.0,
+                "camera_type": "PERSP",
+                "look_at": target_position
             },
             {
                 "name": "Back",
                 "location": (target_position[0], target_position[1] + distance, target_position[2]),
                 "rotation": (1.5708, 0, 3.14159),
-                "ortho_scale": self.get_ortho_scale(distance)
+                "ortho_scale": self.get_ortho_scale(distance),
+                "camera_type": "ORTHO"
             },
             {
                 "name": "Top",
                 "location": (target_position[0], target_position[1], target_position[2] + distance),
                 "rotation": (0, 0, 0),
-                "ortho_scale": self.get_ortho_scale(distance)
+                "ortho_scale": self.get_ortho_scale(distance),
+                "camera_type": "ORTHO"
             }
         ]
         
@@ -298,7 +316,19 @@ class BlenderMCPServer:
             for i, view in enumerate(views):
                 camera.location = view["location"]
                 camera.rotation_euler = view["rotation"]
-                camera.data.ortho_scale = view["ortho_scale"]
+                
+                if view.get("camera_type") == "PERSP" and "look_at" in view:
+                    direction = Vector(view["look_at"]) - Vector(camera.location)
+                    rot_quat = direction.to_track_quat('-Z', 'Y')
+                    camera.rotation_euler = rot_quat.to_euler()
+                    
+                camera.data.type = view.get("camera_type", "ORTHO")
+                if camera.data.type == 'PERSP':
+                    camera.data.lens = 35  
+                    if "fov" in view:
+                        camera.data.angle = math.radians(view["fov"])
+                else:
+                    camera.data.ortho_scale = view["ortho_scale"]
                 
                 bpy.context.scene.camera = camera
                 
