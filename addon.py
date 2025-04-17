@@ -11,9 +11,11 @@ import traceback
 import os
 import shutil
 import random
+import base64
 from PIL import Image
 from mathutils import Vector, Color 
 from datetime import datetime
+from math import cos, sin, pi
 from bpy.props import StringProperty, IntProperty, BoolProperty, EnumProperty
 
 bl_info = {
@@ -625,7 +627,7 @@ class BlenderMCPServer:
             "scene_name": bpy.context.scene.name,
             "object_count": len(bpy.context.scene.objects)
         }
-    
+        
     def get_scene_info(self):
         """Get information about the current Blender scene"""
         try:
@@ -788,11 +790,6 @@ class BlenderMCPServer:
                     raise TypeError("custom_properties must be a dictionary or JSON string")
             
             initial_props = {
-                "initialTransform": {
-                    "location": [obj.location.x, obj.location.y, obj.location.z],
-                    "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
-                    "scale": [obj.scale.x, obj.scale.y, obj.scale.z]
-                },
                 "initialName": obj.name,
             }
             
@@ -872,11 +869,6 @@ class BlenderMCPServer:
                     obj[key] = json.dumps(value)
                 else:
                     obj[key] = value
-        obj["initialTransform"] = json.dumps({
-            "location": [obj.location.x, obj.location.y, obj.location.z],
-            "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
-            "scale": [obj.scale.x, obj.scale.y, obj.scale.z]
-        })
         obj["images"] = self.render_images((obj.location.x, obj.location.y, obj.location.z), name, 5)
         
         result = {
@@ -886,7 +878,6 @@ class BlenderMCPServer:
             "rotation": [obj.rotation_euler.x, obj.rotation_euler.y, obj.rotation_euler.z],
             "scale": [obj.scale.x, obj.scale.y, obj.scale.z],
             "visible": obj.visible_get(),
-            "initialTransform": json.loads(obj["initialTransform"]),
             "images": obj["images"],
         }
 
@@ -895,21 +886,107 @@ class BlenderMCPServer:
             result["world_bounding_box"] = bounding_box
         return result
 
-    def duplicate_object(self, name):
-            obj = bpy.data.objects.get(name)
-            if not obj:
-                raise ValueError(f"Object not found: {name}")
-            
+    def generate_duplicate_positions(self, obj_count, pattern, spacing, grid_size):
+        """Generate positions for duplicated objects based on pattern"""
+        positions = []
+        if pattern == "line":
+            for i in range(obj_count):
+                positions.append((i * spacing[0], i * spacing[1], i * spacing[2]))
+        
+        elif pattern == "grid" and grid_size:
+            rows, cols = grid_size
+            for i in range(rows):
+                for j in range(cols):
+                    if len(positions) >= obj_count:
+                        break
+                    positions.append((j * spacing[0], i * spacing[1], 0))
+        
+        elif pattern == "circle":
+            radius = spacing[0] if spacing else 1.0
+            for i in range(obj_count):
+                angle = 2 * pi * i / obj_count
+                positions.append((radius * cos(angle), radius * sin(angle), 0))
+        
+        elif pattern == "random":
+            for _ in range(obj_count):
+                positions.append((
+                    random.uniform(-spacing[0], spacing[0]) if spacing else random.uniform(-1, 1),
+                    random.uniform(-spacing[1], spacing[1]) if spacing else random.uniform(-1, 1),
+                    random.uniform(-spacing[2], spacing[2]) if spacing else random.uniform(-1, 1)
+                ))
+        
+        else:
+            positions = [(0, 0, 0)] * obj_count
+        
+        return positions
+    
+    def apply_duplicate_settings(self, new_obj, original_obj, position, random_rotation=False):
+        """Apply position and rotation settings to duplicated object"""
+        new_obj.location = (
+            original_obj.location.x + position[0],
+            original_obj.location.y + position[1],
+            original_obj.location.z + position[2]
+        )
+        
+        if random_rotation:
+            new_obj.rotation_euler = (
+                random.uniform(0, 2*pi),
+                random.uniform(0, 2*pi),
+                random.uniform(0, 2*pi)
+            )
+    
+    def duplicate_single_object(self, obj, count, pattern, spacing, grid_size, random_rotation=False):
+        """Handle duplication for a single object"""
+        if spacing is None:
+            spacing = [1.0, 1.0, 1.0]
+        
+        positions = self.generate_duplicate_positions(count, pattern, spacing, grid_size)
+        new_names = []
+        
+        for i, pos in enumerate(positions):
             new_obj = obj.copy()
             new_obj.data = obj.data.copy()
             
             bpy.context.collection.objects.link(new_obj)
-            new_obj.name = obj.name + "_copy"
+            new_obj.name = f"{obj.name}_copy_{i+1}"
+            self.apply_duplicate_settings(new_obj, obj, pos, random_rotation)
+            new_names.append(new_obj.name)
+        
+        return new_names
+    
+    def duplicate_multiple_objects(self, names, count, pattern, spacing, grid_size, random_rotation):
+        """Handle duplication for multiple objects"""
+        if spacing is None:
+            spacing = [1.0, 1.0, 1.0]
+        
+        new_names = []
+        for obj_name in names:
+            obj = bpy.data.objects.get(obj_name)
+            if not obj:
+                raise ValueError(f"Object not found: {obj_name}")
             
-            result = {
-                "name": new_obj.name,
-            }
-            return result
+            obj_new_names = self.duplicate_single_object(obj, count, pattern, spacing, grid_size, random_rotation)
+            new_names.extend(obj_new_names)
+        
+        return new_names
+    
+    def duplicate_object(self, name, count=1, pattern=None, grid_size=None, spacing=None, random_rotation=False):
+        """Main duplicate function that handles both single and multiple objects"""
+        try:
+            if isinstance(name, str):
+                obj = bpy.data.objects.get(name)
+                if not obj:
+                    raise ValueError(f"Object not found: {name}")
+                
+                new_names = self.duplicate_single_object(obj, count, pattern, spacing, grid_size, random_rotation)
+                return {"name": new_names} if count > 1 else {"name": new_names[0]}
+            else:
+                new_names = self.duplicate_multiple_objects(name, count, pattern, spacing, grid_size, random_rotation)
+                return {"names": new_names}
+        except Exception as e:
+            print(f"Error in duplicate_object: {str(e)}")
+            traceback.print_exc()
+            return {"status": "error", "message": str(e)}
         
     def delete_object(self, name):
         """Delete an object from the scene"""

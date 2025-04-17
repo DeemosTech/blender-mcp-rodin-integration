@@ -238,13 +238,23 @@ def get_blender_connection():
 
 @mcp.tool()
 def get_scene_info(ctx: Context) -> str:
-    """Get detailed information about the current Blender scene"""
+    """Get detailed information about the current Blender scene -images """
     try:
         blender = get_blender_connection()
         result = blender.send_command("get_scene_info")
         
-        # Just return the JSON representation of what Blender sent us
-        return json.dumps(result, indent=2)
+        json_output = json.dumps(result, indent=2)
+        
+        if "images" in result and isinstance(result["images"], str):
+            img_path = result["images"]
+            if len(img_path) > 3 and ('/' in img_path or '\\' in img_path or '.' in img_path):
+                if os.path.exists(img_path):
+                    return json_output, Image(path=img_path)
+                else:
+                    logger.warning(f"Image path does not exist: {img_path}")
+        
+        return json_output 
+        
     except Exception as e:
         logger.error(f"Error getting scene info from Blender: {str(e)}")
         return f"Error getting scene info: {str(e)}"
@@ -252,7 +262,7 @@ def get_scene_info(ctx: Context) -> str:
 @mcp.tool()
 def get_object_info(ctx: Context, object_name: str) -> str:
     """
-    Get detailed information about a specific object in the Blender scene.
+    Get detailed information about a specific object and images in the Blender scene.
     
     Parameters:
     - object_name: The name of the object to get information about
@@ -261,36 +271,22 @@ def get_object_info(ctx: Context, object_name: str) -> str:
         blender = get_blender_connection()
         result = blender.send_command("get_object_info", {"name": object_name})
         
-        # Just return the JSON representation of what Blender sent us
-        return json.dumps(result, indent=2)
+        json_output = json.dumps(result, indent=2)
+        
+        if "images" in result and isinstance(result["images"], str):
+            img_path = result["images"]
+            if len(img_path) > 3 and ('/' in img_path or '\\' in img_path or '.' in img_path):
+                if os.path.exists(img_path):
+                    return json_output, Image(path=img_path)
+                else:
+                    logger.warning(f"Image path does not exist: {img_path}")
+        
+        return json_output  
     except Exception as e:
         logger.error(f"Error getting object info from Blender: {str(e)}")
         return f"Error getting object info: {str(e)}"
 
-@mcp.tool()
-def get_around_objects(ctx: Context, object_name: str, distance_multiplier: float = 1.0) -> dict:
-    """
-    Get objects around a specific object in the Blender scene.
-    
-    Parameters:
-    - object_name: The name of the object to get objects around
-    - distance_multiplier: Multiplier for detection range (default: 1.0)
-    """
-    try:
-        blender = get_blender_connection()
-        result = blender.send_command("get_around_objects", {
-            "name": object_name,
-            "distance_multiplier": distance_multiplier
-        })
-        
-        # Return the result directly as a dictionary
-        return result
-    except Exception as e:
-        logger.error(f"Error getting objects around object from Blender: {str(e)}")
-        return {
-            "error": str(e),
-            "success": False
-        }
+
 
 @mcp.tool()
 def create_object(
@@ -332,7 +328,7 @@ def create_object(
     - abso_major_rad: Total exterior radius of the torus
     - abso_minor_rad: Total interior radius of the torus
     - generate_uvs: Whether to generate a default UV map
-    - custom_properties:Custom properties to be set on the object
+    - custom_properties: Custom properties to be set on the object
     Returns:
     A message indicating the created object name.
     """
@@ -345,12 +341,6 @@ def create_object(
         rot = rotation or [0, 0, 0]
         sc = scale or [1, 1, 1]
         default_custom_properties = custom_properties or {
-                        "initialTransform": 
-                            {
-                                "location": loc,
-                                "rotation": rot,
-                                "scale": sc
-                            },
                         "initialName": name
                     }
        
@@ -408,7 +398,7 @@ def modify_object(
     - rotation: Optional [x, y, z] rotation in radians
     - scale: Optional [x, y, z] scale factors
     - visible: Optional boolean to set visibility
-    - custom_properties:Custom properties to be set on the object
+    - custom_properties: Custom properties to be set on the object
     """
     try:
         # Get the global connection
@@ -428,38 +418,65 @@ def modify_object(
             params["custom_properties"] = custom_properties
                
         result = blender.send_command("modify_object", params)
-        return f"Modified object: { {'name': result['name'], 'save_image': result['images']} }"
+        result_str = f"Modified object: { {'name': result['name']} }"
+        
+        if "images" in result and isinstance(result["images"], str):
+            img_path = result["images"]
+            if len(img_path) > 3 and ('/' in img_path or '\\' in img_path or '.' in img_path):
+                if os.path.exists(img_path):
+                    return result_str, Image(path=img_path)
+                else:
+                    logger.warning(f"Image path does not exist: {img_path}")
+        
+        return result_str
+    
     except Exception as e:
         logger.error(f"Error modifying object: {str(e)}")
         return f"Error modifying object: {str(e)}"
 
-@mcp.tool()
-def load_image(ctx: Context, filepath: str) -> str:
-    """
-    Load an image file into chat context.
-    
-    Parameters:
-    - filepath: Path to the image file
-    """
-    return Image(path=filepath)
 
 @mcp.tool()
-def duplicate_object(ctx: Context,name: str) -> str:
+def duplicate_object(ctx: Context,
+    name: str | list[str],
+    count: int = 1,
+    pattern: str = None,
+    grid_size: list[int] = None,
+    spacing: list[float] = None,
+    random_rotation: bool = False
+) -> str:
     """
-    Duplicate an object in the Blender scene.
+    Duplicate one or more objects with advanced positioning options.
     
     Parameters:
-    - name: Name of the object to duplicate
+    - name: Name(s) of object(s) to duplicate
+    - count: Number of duplicates per object
+    - pattern: "grid", "line", "circle", "random" (default: None)
+    - grid_size: [rows, cols] for grid pattern
+    - spacing: [x, y, z] spacing between duplicates
+    - random_rotation: Apply random rotation to duplicates
+    
+    Returns:
+    - Status message with created object names
     """
     try:
         # Get the global connection
         blender = get_blender_connection()
-        params = {"name": name}
+        params = {
+            "name": name,
+            "count": count,
+            "pattern": pattern,
+            "grid_size": grid_size,
+            "spacing": spacing,
+            "random_rotation": random_rotation
+        }
         result = blender.send_command("duplicate_object", params)
-        return f"Duplicated object: {result['name']}"
+        
+        if isinstance(name, list):
+            return f"Created {count} copies of objects with {pattern} pattern: {', '.join(result['names'])}"
+        return f"Created {count} copies of object with {pattern} pattern: {result['name']}"
     except Exception as e:
-        logger.error(f"Error duplicating object: {str(e)}")
-        return f"Error duplicating object: {str(e)}"    
+        logger.error(f"Error duplicating object(s): {str(e)}")
+        return f"Error duplicating object(s): {str(e)}"    
     
 @mcp.tool()
 def delete_object(ctx: Context, name: str) -> str:
