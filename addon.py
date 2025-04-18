@@ -46,7 +46,7 @@ class BlenderMCPServer:
         if not target_obj:
             return []
         
-        bbox_corners = [target_obj.matrix_world @ mathutils.Vector(corner) 
+        bbox_corners = [target_obj.matrix_world @ Vector(corner) 
                 for corner in target_obj.bound_box]
     
         min_corner = bbox_corners[0].copy()
@@ -71,7 +71,7 @@ class BlenderMCPServer:
             if obj == target_obj or obj.type != 'MESH':
                 continue
                 
-            obj_bbox_corners = [obj.matrix_world @ mathutils.Vector(corner) 
+            obj_bbox_corners = [obj.matrix_world @ Vector(corner) 
                             for corner in obj.bound_box]
             
             obj_min = obj_bbox_corners[0].copy()
@@ -166,7 +166,7 @@ class BlenderMCPServer:
 
         return 0.6 * hue_diff + 0.2 * sat_diff + 0.2 * val_diff
 
-    def calculate_farthest_point(self,center, objects):
+    def calculate_farthest_point(self, center, objects):
         """Calculate the farthest point from center using bounding boxes"""
         max_distance = 0
         
@@ -180,9 +180,9 @@ class BlenderMCPServer:
                 distance = (Vector(point) - Vector(center)).length
                 if distance > max_distance:
                     max_distance = distance            
-        return max_distance    
+        return max_distance   
     
-    def calculate_distance_from_object(self,obj):
+    def calculate_distance_from_object(self, obj):
         """Calculate the recommended distance (half of the longest side) based on the object's bounding box."""
         bbox_corners = [obj.matrix_world @ Vector(corner) for corner in obj.bound_box]
         
@@ -197,9 +197,9 @@ class BlenderMCPServer:
         size_y = max_y - min_y
         size_z = max_z - min_z
         
-        return max(size_x, size_y, size_z)*1.6
+        return max(size_x, size_y, size_z) * 1.6
     
-    def get_ortho_scale(self,distance, margin_factor=1.2):
+    def get_ortho_scale(self, distance, margin_factor=1.2):
         """Calculate ortho_scale dynamically based on the distance (furthest distance)."""
         return distance * margin_factor
     
@@ -216,8 +216,8 @@ class BlenderMCPServer:
             target_position[2] + height
         )
         
-    def create_movable_camera(self,distance,name):
-        "'create single movable camera'"
+    def create_movable_camera(self, distance, name):
+        """Create single movable camera"""
         if "Viewpoint_Camera_Movable" in bpy.data.objects:
             cam = bpy.data.objects["Viewpoint_Camera_Movable"]
             print("Found existing camera, reusing it")
@@ -236,11 +236,10 @@ class BlenderMCPServer:
         if name and name.strip():
             cam.data.clip_start = distance * 0.4
         else:
-            cam.data.clip_start = distance * 0.666
-        
+            cam.data.clip_start = distance * 0.8
         return cam
     
-    def render_images(self, position, name,scene_distance):
+    def render_images(self, position, name, scene_distance):
         if name and name.strip():
             try:
                 #find and highlight
@@ -248,7 +247,7 @@ class BlenderMCPServer:
                 bpy.context.view_layer.objects.active = obj
                 obj.select_set(True)
                   
-                obj.color = self.random_color()
+                obj.color = self.random_color_by_name(name)
                 target_position = obj.location
                 distance=self.calculate_distance_from_object(obj)
                 print(f"Found object '{name}', position: {target_position}, auto distance: {distance:.2f}")
@@ -290,7 +289,7 @@ class BlenderMCPServer:
             {
                 "name": "Front_Angle",
                 "location": self.calculate_perspective_camera_position(target_position, distance),
-                "rotation": (math.radians(30), 0, math.radians(45)),  # 30度俯角，45度水平旋转
+                "rotation": (math.radians(30), 0, math.radians(45)),  # 30 degree pitch, 45 degree yaw
                 "fov": 45.0,
                 "camera_type": "PERSP",
                 "look_at": target_position
@@ -648,9 +647,20 @@ class BlenderMCPServer:
             objects_to_process = []
             
             for i, obj in enumerate(bpy.context.scene.objects):
-                new_color = self.random_color_by_name(obj.name)
-                obj.color = new_color
+                if obj.type not in {'MESH', 'CURVE', 'SURFACE', 'META', 'FONT', 'ARMATURE'}:
+                    continue
                 
+                new_color = self.random_color_by_name(obj.name)
+                if hasattr(obj, 'color'):
+                    obj.color = new_color
+                
+                objects_to_process.append(obj)
+                if hasattr(obj, 'location'):
+                    total_x += obj.location.x
+                    total_y += obj.location.y
+                    total_z += obj.location.z
+                    valid_objects += 1
+                        
                 # Collect minimal object information (limit to first 10 objects)
                 if i < 10:
                     
@@ -660,17 +670,11 @@ class BlenderMCPServer:
                         "location": [round(float(obj.location.x), 2), 
                                     round(float(obj.location.y), 2), 
                                     round(float(obj.location.z), 2)],
-                        "color":new_color,
+                        "color": new_color,
                     }
                     scene_info["objects"].append(obj_info)
                     
-                    objects_to_process.append(obj)
-                    if hasattr(obj, 'location'):
-                        total_x += obj.location.x
-                        total_y += obj.location.y
-                        total_z += obj.location.z
-                        valid_objects += 1
-            
+                    
             if valid_objects > 0:
                 center_x = total_x / valid_objects
                 center_y = total_y / valid_objects
