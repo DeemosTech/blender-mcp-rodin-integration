@@ -194,7 +194,8 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
 mcp = FastMCP(
     "BlenderMCP",
     description="Blender integration through the Model Context Protocol",
-    lifespan=server_lifespan
+    lifespan=server_lifespan,
+    port=8000,
 )
 
 # Resource endpoints
@@ -891,7 +892,7 @@ def poll_rodin_job_status(
 
         Returns a list of status. The task is done if all status are "Done".
         If "Failed" showed up, the generating process failed.
-        This is a polling API, so only proceed if the status are finally determined ("Done" or "Canceled").
+        This is a polling API, so only proceed if the status are finally determined ("Done", "Failed" or "Canceled").
 
     For Hyper3D Rodin mode FAL_AI:
         Parameters:
