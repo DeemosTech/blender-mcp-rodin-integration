@@ -12,10 +12,10 @@ import os
 import shutil
 import random
 import base64
-from PIL import Image
+from PIL import Image,ImageDraw, ImageFont
 from mathutils import Vector, Color 
 from datetime import datetime
-from math import cos, sin, pi
+from math import cos, sin, pi,sqrt
 from bpy.props import StringProperty, IntProperty, BoolProperty, EnumProperty
 
 bl_info = {
@@ -197,7 +197,7 @@ class BlenderMCPServer:
         size_y = max_y - min_y
         size_z = max_z - min_z
         
-        return max(size_x, size_y, size_z) * 1.6
+        return max(size_x, size_y, size_z) * 2.2
     
     def get_ortho_scale(self, distance, margin_factor=1.2):
         """Calculate ortho_scale dynamically based on the distance (furthest distance)."""
@@ -218,62 +218,55 @@ class BlenderMCPServer:
         
     def create_movable_camera(self, distance, name):
         """Create single movable camera"""
+        cam = None
         if "Viewpoint_Camera_Movable" in bpy.data.objects:
             cam = bpy.data.objects["Viewpoint_Camera_Movable"]
             print("Found existing camera, reusing it")
+            cam.data.type = 'PERSP' 
+            cam.data.lens = 35  
         else:
+            bpy.context.scene.render.engine = 'BLENDER_WORKBENCH'
             bpy.ops.object.camera_add()
+            bpy.context.scene.render.engine = 'CYCLES'
             cam = bpy.context.active_object
             cam.name = "Viewpoint_Camera_Movable"
-            cam.data.type = 'ORTHO'
+            
             print("Created new camera")
 
         bpy.context.view_layer.objects.active = cam
         cam.select_set(True)
         
-        cam.data.ortho_scale = self.get_ortho_scale(distance)
+        
         
         if name and name.strip():
             cam.data.clip_start = distance * 0.4
         else:
             cam.data.clip_start = distance * 0.8
+            
+        bpy.context.view_layer.update()
         return cam
     
-    def render_images(self, position, name, scene_distance):
+    def render_images(self, position, name, camera_distance):
+        target_position = position
+        distance=camera_distance
+        bpy.ops.object.select_all(action='DESELECT')
         if name and name.strip():
             try:
                 #find and highlight
                 obj = bpy.data.objects[name]
                 bpy.context.view_layer.objects.active = obj
                 obj.select_set(True)
-                  
+                
                 obj.color = self.random_color_by_name(name)
-                target_position = obj.location
-                distance=self.calculate_distance_from_object(obj)
+                
                 print(f"Found object '{name}', position: {target_position}, auto distance: {distance:.2f}")
             except KeyError:
                 print(f"Error: Object '{name}' not found in scene! Using default position.")
-                target_position = position
-                distance = 5  #not found obj 
-        else:
-            bpy.ops.object.select_all(action='DESELECT')
-            target_position = position
-            distance = scene_distance  #get scne distance
+                
+        else:          
             print(f"position: {target_position}, auto distance: {distance:.2f}")
         
-        for area in bpy.context.screen.areas:
-            if area.type == 'VIEW_3D':
-                space = area.spaces.active
-                space.shading.type = 'SOLID'
-                space.shading.color_type = 'OBJECT'
-                space.shading.show_xray = False
-                space.shading.background_type = 'THEME'
-                space.shading.background_color = (0.1, 0.1, 0.1)  # gray background
-                space.overlay.show_floor = True
-                space.overlay.show_axis_x = True
-                space.overlay.show_axis_y = True
-                space.overlay.show_axis_z = True
-                
+        
         temp_dir = bpy.app.tempdir
         output_dir = os.path.join(temp_dir, "viewpoint_screenshots")
         os.makedirs(output_dir, exist_ok=True)
@@ -282,31 +275,42 @@ class BlenderMCPServer:
             {
                 "name": "Front",
                 "location": (target_position[0], target_position[1] - distance, target_position[2]),
-                "rotation": (1.5708, 0, 0),
-                "ortho_scale": self.get_ortho_scale(distance),
-                "camera_type": "ORTHO"
-            },
-            {
-                "name": "Front_Angle",
-                "location": self.calculate_perspective_camera_position(target_position, distance),
-                "rotation": (math.radians(30), 0, math.radians(45)),  # 30 degree pitch, 45 degree yaw
+                "rotation": (math.radians(0), 0, math.radians(90)), 
                 "fov": 45.0,
                 "camera_type": "PERSP",
-                "look_at": target_position
+                "look_at": target_position,
+                "shading_type": "SOLID",
+                "color_type": "OBJECT",
             },
             {
-                "name": "Back",
-                "location": (target_position[0], target_position[1] + distance, target_position[2]),
-                "rotation": (1.5708, 0, 3.14159),
+                "name": "Right",
+                "location": (target_position[0] + distance, target_position[1], target_position[2]),
+                "rotation": (math.radians(0), 0, math.radians(0)),
+                "fov": 45.0,
+                "camera_type": "PERSP",
+                "look_at": target_position,
+                "shading_type": "SOLID",
+                "color_type": "OBJECT",
+            },
+            {
+                "name": "Bottom_Angeled",
+                "location": (target_position[0], target_position[1], target_position[2]- distance),
+                "rotation": (math.radians(0), 0, math.radians(0)),
                 "ortho_scale": self.get_ortho_scale(distance),
-                "camera_type": "ORTHO"
+                "camera_type": "ORTHO",
+                "look_at": target_position,
+                "shading_type": "SOLID",
+                "color_type": "OBJECT"
             },
             {
                 "name": "Top",
                 "location": (target_position[0], target_position[1], target_position[2] + distance),
-                "rotation": (0, 0, 0),
+                "rotation": (math.radians(0), 0, math.radians(180)),
                 "ortho_scale": self.get_ortho_scale(distance),
-                "camera_type": "ORTHO"
+                "camera_type": "ORTHO",
+                "look_at": target_position,
+                "shading_type": "MATERIAL",
+                "color_type": "OBJECT",
             }
         ]
         
@@ -314,30 +318,43 @@ class BlenderMCPServer:
         temp_images = []
         composite_path=None
         try:
+            # Render all four views
             for i, view in enumerate(views):
                 camera.location = view["location"]
-                camera.rotation_euler = view["rotation"]
+                camera.rotation_euler = view["rotation"]    
+            
+                direction = Vector(view["look_at"]) - Vector(camera.location)
+                rot_quat = direction.to_track_quat('-Z', 'Y')
+                camera.rotation_euler = rot_quat.to_euler()
                 
-                if view.get("camera_type") == "PERSP" and "look_at" in view:
-                    direction = Vector(view["look_at"]) - Vector(camera.location)
-                    rot_quat = direction.to_track_quat('-Z', 'Y')
-                    camera.rotation_euler = rot_quat.to_euler()
-                    
-                camera.data.type = view.get("camera_type", "ORTHO")
+                camera.data.type = view["camera_type"]
+                
                 if camera.data.type == 'PERSP':
-                    camera.data.lens = 35  
-                    if "fov" in view:
-                        camera.data.angle = math.radians(view["fov"])
+                    camera.data.lens = 35
+                    camera.data.angle = math.radians(view["fov"])
                 else:
+                    
                     camera.data.ortho_scale = view["ortho_scale"]
                 
                 bpy.context.scene.camera = camera
                 
+                # Configure viewport settings
                 for area in bpy.context.window.screen.areas:
                     if area.type == 'VIEW_3D':
+                        space = area.spaces.active
+                        space.shading.type = view["shading_type"]
+                        space.shading.color_type = view["color_type"]
+                        space.shading.show_xray = False
+                        space.shading.background_type = 'THEME'
+                        space.shading.background_color = (0.1, 0.1, 0.1)
+                        space.overlay.show_floor = True
+                        space.overlay.show_axis_x = True
+                        space.overlay.show_axis_y = True
+                        space.overlay.show_axis_z = True
                         area.spaces.active.region_3d.view_perspective = 'CAMERA'
                         break
                 
+                # Set render settings
                 bpy.context.scene.render.resolution_x = 384
                 bpy.context.scene.render.resolution_y = 384
                 bpy.context.scene.render.resolution_percentage = 100
@@ -345,56 +362,87 @@ class BlenderMCPServer:
                 bpy.context.scene.render.image_settings.color_mode = 'RGB'
                 bpy.context.scene.render.film_transparent = False
                 
-                temp_path = os.path.join(temp_dir, f"temp_view_{i}.png")
+                # Render and save temporary image
+                temp_path = os.path.join(output_dir, f"temp_view_{i}.png")
                 bpy.context.scene.render.filepath = temp_path
                 
                 try:
                     bpy.ops.render.opengl(write_still=True)
                     if os.path.exists(temp_path):
                         temp_images.append(temp_path)
-                        print(f"Rendered view {i+1}: {temp_path}")
+                        print(f"Successfully rendered {view['name']} view: {temp_path}")
                     else:
-                        print(f"Render failed for view {i+1}")
+                        print(f"Failed to render {view['name']} view")
+                        return None
                 except Exception as e:
-                    print(f"Render failed for view {i+1}: {str(e)}")
+                    print(f"Error rendering {view['name']} view: {str(e)}")
+                    return None
 
-            
+            # Create composite image if all four views were rendered
             if len(temp_images) == 4:
                 try:
                     images = [Image.open(img_path) for img_path in temp_images]
                     
-                    gap_size = 2 
-                    border_size = 3   
-                    
+                    gap_size = 2
+                    border_size = 3
                     width, height = images[0].size
                     composite_width = width * 2 + gap_size + border_size * 2
                     composite_height = height * 2 + gap_size + border_size * 2
                     
-                    composite = Image.new('RGB', (composite_width, composite_height), color=(255, 255, 255))
+                    composite = Image.new('RGB', (composite_width, composite_height), (255, 255, 255))
                     
-                    composite.paste(images[0], (border_size, border_size))
-                    composite.paste(images[1], (width + gap_size + border_size, border_size))
-                    composite.paste(images[2], (border_size, height + gap_size + border_size))
-                    composite.paste(images[3], (width + gap_size + border_size, height + gap_size + border_size))
-                    
+                    composite.paste(images[0], (border_size, border_size))  
+                    composite.paste(images[1], (width + gap_size + border_size, border_size))  
+                    composite.paste(images[2], (border_size, height + gap_size + border_size))  
+                    composite.paste(images[3], (width + gap_size + border_size, height + gap_size + border_size))  
+
+                    grid_info = self.get_grid_info()
+                    if "error" not in grid_info:
+                        draw = ImageDraw.Draw(composite)
+                        try:
+                            font = ImageFont.truetype("arial.ttf", 12)
+                        except:
+                            font = ImageFont.load_default()
+                        
+                        text = (f"Grid: {grid_info['grid_settings']['base_unit']:.2f}{grid_info['unit_system']}/unit\n"
+                            f"Subdivisions: {grid_info['grid_settings']['subdivisions']}\n"
+                            )
+                        
+                        draw.text((border_size + 10, composite_height - border_size - 30), 
+                                text, fill=(255, 255, 255), font=font)
+                        
+                        text = ("Othographic\nMATERIAL mode\nTOP View")
+                        draw.text((composite_width - border_size - 100, composite_height - border_size - 50), 
+                                text, fill=(255, 255, 255), font=font)
+                        text = ("Othographic\nSOLID mode\nButtom View")
+                        draw.text((composite_width - border_size - 466, composite_height - border_size - 50), 
+                                text, fill=(255, 255, 255), font=font)
+                        text = ("Perspective\nSOLID mode\nFront View")
+                        draw.text((composite_width - border_size - 460, composite_height - border_size - 436), 
+                                text, fill=(255, 255, 255), font=font)
+                        text = ("Perspective\nSOLID mode\nRight View")
+                        draw.text((composite_width - border_size - 75, composite_height - border_size - 436), 
+                                text, fill=(255, 255, 255), font=font)
+
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    rand = random.randint(100, 999)
-                    composite_path = os.path.join(output_dir, f"composite_view_{timestamp}_{rand}.png")
+                    composite_path = os.path.join(output_dir, f"composite_{timestamp}.png")
                     composite.save(composite_path)
-                    print(f"Created composite image: {composite_path}")
+                    print(f"Successfully saved composite image: {composite_path}")
                     
                     for img in images:
                         img.close()
+                        
                 except Exception as e:
                     print(f"Error creating composite image: {str(e)}")
             else:
-                print(f"Cannot create composite, only {len(temp_images)} images available (need 4).")
-
+                print(f"Cannot create composite - expected 4 images but got {len(temp_images)}")
+                
         finally:
             for area in bpy.context.window.screen.areas:
                 if area.type == 'VIEW_3D':
                     area.spaces.active.region_3d.view_perspective = 'PERSP'
                     break
+                    
             for temp_img in temp_images:
                 try:
                     os.remove(temp_img)
@@ -639,10 +687,8 @@ class BlenderMCPServer:
                 "materials_count": len(bpy.data.materials),
             }
             
-            total_x = 0.0
-            total_y = 0.0
-            total_z = 0.0
-            valid_objects = 0
+            min_coord = Vector((float('inf'), float('inf'), float('inf')))
+            max_coord = Vector((-float('inf'), -float('inf'), -float('inf')))
             
             objects_to_process = []
             
@@ -651,54 +697,113 @@ class BlenderMCPServer:
                     continue
                 
                 new_color = self.random_color_by_name(obj.name)
-                if hasattr(obj, 'color'):
-                    obj.color = new_color
-                
+                obj.color = new_color
                 objects_to_process.append(obj)
-                if hasattr(obj, 'location'):
-                    total_x += obj.location.x
-                    total_y += obj.location.y
-                    total_z += obj.location.z
-                    valid_objects += 1
+                
+                if hasattr(obj, 'bound_box'):
+                    for corner in obj.bound_box:
+                        world_corner = obj.matrix_world @ Vector(corner)
+                        min_coord.x = min(min_coord.x, world_corner.x)
+                        min_coord.y = min(min_coord.y, world_corner.y)
+                        min_coord.z = min(min_coord.z, world_corner.z)
+                        max_coord.x = max(max_coord.x, world_corner.x)
+                        max_coord.y = max(max_coord.y, world_corner.y)
+                        max_coord.z = max(max_coord.z, world_corner.z)
                         
-                # Collect minimal object information (limit to first 10 objects)
-                if i < 10:
-                    
-                    obj_info = {
-                        "name": obj.name,
-                        "type": obj.type,
-                        "location": [round(float(obj.location.x), 2), 
-                                    round(float(obj.location.y), 2), 
-                                    round(float(obj.location.z), 2)],
-                        "color": new_color,
-                    }
-                    scene_info["objects"].append(obj_info)
+                
+                obj_info = {
+                    "name": obj.name,
+                    "type": obj.type,
+                    "location": [round(float(obj.location.x), 2), 
+                                round(float(obj.location.y), 2), 
+                                round(float(obj.location.z), 2)],
+                    "color": new_color,
+                }
+                scene_info["objects"].append(obj_info)
                     
                     
-            if valid_objects > 0:
-                center_x = total_x / valid_objects
-                center_y = total_y / valid_objects
-                center_z = total_z / valid_objects
-                scene_center = Vector((center_x, center_y, center_z))
-                scene_info["scene_center"] = [
-                    round(center_x, 2),
-                    round(center_y, 2),
-                    round(center_z, 2)
-                ]
-            else:
-                scene_center = Vector((0, 0, 0))
-                scene_info["scene_center"] = [0, 0, 0]
-            max_distance = self.calculate_farthest_point(scene_center, objects_to_process) #camera distance
+            scene_center = (min_coord + max_coord) * 0.5
+            bbox_size = max_coord - min_coord
+            diagonal_distance = bbox_size.length * 1.1  
             
-            scene_info["images"] = self.render_images(scene_center,"", max_distance)
+            scene_info["scene_center"] = [
+                round(scene_center.x, 2),
+                round(scene_center.y, 2),
+                round(scene_center.z, 2)
+            ]
+            
+            scene_info["images"] = self.render_images(scene_center, "", diagonal_distance)
 
             print(f"Scene info collected: {len(scene_info['objects'])} objects")
+            print(f"Scene info images: {scene_info['images']}")
             return scene_info
         except Exception as e:
             print(f"Error in get_scene_info: {str(e)}")
             traceback.print_exc()
             return {"error": str(e)}
     
+    def get_grid_info(self):
+        """Get information about the grid in current view"""
+        try:
+            grid_info = {
+                "grid_settings": {},
+                "fixed_grid": {},
+                "visible_grid": {},
+                "unit_system": "BU"
+            }
+            
+            unit_settings = bpy.context.scene.unit_settings
+            scale_length = unit_settings.scale_length
+            
+            if unit_settings.system == 'METRIC':
+                grid_info["unit_system"] = "METRIC"
+            
+            for area in bpy.context.screen.areas:
+                if area.type == 'VIEW_3D':
+                    space_data = area.spaces.active
+                    region_3d = area.spaces.active.region_3d
+                    if hasattr(space_data, 'overlay'):
+                        grid_scale = space_data.overlay.grid_scale
+                        grid_subdivisions = space_data.overlay.grid_subdivisions
+                        
+                        grid_info["grid_settings"].update({
+                            "base_unit": round(float(grid_scale * scale_length), 4),
+                            "subdivisions": grid_subdivisions,
+                            "unit": grid_info["unit_system"]
+                        })
+                        
+                        grid_size = 10 * grid_scale * grid_subdivisions
+                        diagonal_length = sqrt(2 * (grid_size ** 2))
+                        
+                        grid_info["fixed_grid"].update({
+                            "size": round(float(grid_size * scale_length), 2),
+                            "diagonal": round(float(diagonal_length * scale_length), 2),
+                            "unit": grid_info["unit_system"]
+                        })
+                        
+                        view_distance = region_3d.view_distance
+                        aspect_ratio = area.width / area.height
+                        visible_grid_width = view_distance * 2 * aspect_ratio
+                        visible_grid_height = view_distance * 2
+                        
+                        grid_info["visible_grid"].update({
+                            "width": round(float(visible_grid_width * scale_length), 2),
+                            "height": round(float(visible_grid_height * scale_length), 2),
+                            "unit": grid_info["unit_system"],
+                            "view_distance": round(float(view_distance * scale_length), 2)
+                        })
+                        
+                        return grid_info
+            
+            grid_info["error"] = "3D view not found or grid info unavailable"
+            return grid_info
+            
+        except Exception as e:
+            return {
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+         
     @staticmethod
     def _get_aabb(obj):
         """ Returns the world-space axis-aligned bounding box (AABB) of an object. """
@@ -706,14 +811,14 @@ class BlenderMCPServer:
             raise TypeError("Object must be a mesh")
 
         # Get the bounding box corners in local space
-        local_bbox_corners = [mathutils.Vector(corner) for corner in obj.bound_box]
+        local_bbox_corners = [Vector(corner) for corner in obj.bound_box]
 
         # Convert to world coordinates
         world_bbox_corners = [obj.matrix_world @ corner for corner in local_bbox_corners]
 
         # Compute axis-aligned min/max coordinates
-        min_corner = mathutils.Vector(map(min, zip(*world_bbox_corners)))
-        max_corner = mathutils.Vector(map(max, zip(*world_bbox_corners)))
+        min_corner = Vector(map(min, zip(*world_bbox_corners)))
+        max_corner = Vector(map(max, zip(*world_bbox_corners)))
 
         return [
             [*min_corner], [*max_corner]
@@ -873,7 +978,8 @@ class BlenderMCPServer:
                     obj[key] = json.dumps(value)
                 else:
                     obj[key] = value
-        obj["images"] = self.render_images((obj.location.x, obj.location.y, obj.location.z), name, 5)
+        distance=self.calculate_distance_from_object(obj)
+        obj["images"] = self.render_images((obj.location.x, obj.location.y, obj.location.z), name, distance)
         
         result = {
             "name": obj.name,
@@ -1044,7 +1150,8 @@ class BlenderMCPServer:
                 "edges": len(mesh.edges),
                 "polygons": len(mesh.polygons),
             }
-        obj_info["images"] = self.render_images((obj.location.x, obj.location.y, obj.location.z),name,5)
+        distance=self.calculate_distance_from_object(obj)
+        obj_info["images"] = self.render_images((obj.location.x, obj.location.y, obj.location.z),name,distance)
         return obj_info
     
     def execute_code(self, code):
