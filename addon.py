@@ -39,6 +39,7 @@ class BlenderMCPServer:
         self.server_thread = None
         self.used_colors = []
         self.min_hue_diff = 0.3
+        self.clip_start_tmp = 0
     
     def nearby_objects(self, name, distance_multiplier=1.0):
         # Identifying objects in proximity to the specified object
@@ -226,22 +227,26 @@ class BlenderMCPServer:
             cam.data.lens = 35  
         else:
             bpy.context.scene.render.engine = 'BLENDER_WORKBENCH'
-            bpy.ops.object.camera_add()
-            bpy.context.scene.render.engine = 'CYCLES'
-            cam = bpy.context.active_object
-            cam.name = "Viewpoint_Camera_Movable"
             
+            cam_data = bpy.data.cameras.new("Viewpoint_Camera_Movable_Data")
+            cam = bpy.data.objects.new("Viewpoint_Camera_Movable", cam_data)
+            bpy.context.collection.objects.link(cam)
+            
+            bpy.context.view_layer.objects.active = cam
+            cam.select_set(True)
+            
+            bpy.context.scene.render.engine = 'CYCLES'
             print("Created new camera")
 
         bpy.context.view_layer.objects.active = cam
         cam.select_set(True)
         
-        
-        
         if name and name.strip():
             cam.data.clip_start = distance * 0.4
+            self.clip_start_tmp=cam.data.clip_start
         else:
             cam.data.clip_start = distance * 0.8
+            self.clip_start_tmp=cam.data.clip_start
             
         bpy.context.view_layer.update()
         return cam
@@ -251,27 +256,46 @@ class BlenderMCPServer:
         distance=camera_distance
         bpy.ops.object.select_all(action='DESELECT')
         if name and name.strip():
-            try:
-                #find and highlight
-                obj = bpy.data.objects[name]
-                bpy.context.view_layer.objects.active = obj
-                obj.select_set(True)
-                
-                obj.color = self.random_color_by_name(name)
-                
-                print(f"Found object '{name}', position: {target_position}, auto distance: {distance:.2f}")
-            except KeyError:
-                print(f"Error: Object '{name}' not found in scene! Using default position.")
-                
-        else:          
-            print(f"position: {target_position}, auto distance: {distance:.2f}")
-        
+            obj = bpy.data.objects.get(name)
+            if obj and obj.visible_get():
+                try:
+                    bpy.context.view_layer.objects.active = obj
+                    obj.select_set(True)
+                    if hasattr(obj, "color"):
+                        obj.color = self.random_color_by_name(name)
+                    print(f"Found object '{name}', position: {target_position}, distance: {distance:.2f}")
+                except Exception as e:
+                    print(f"Error processing object '{name}': {str(e)}")
+            else:
+                print(f"Error: Object '{name}' not found or not visible!")
+        else:
+            print(f"No target object specified. Using default position: {target_position}, distance: {distance:.2f}")
         
         temp_dir = bpy.app.tempdir
         output_dir = os.path.join(temp_dir, "viewpoint_screenshots")
         os.makedirs(output_dir, exist_ok=True)
         
         views = [
+            {
+                "name": "Top",
+                "location": (target_position[0], target_position[1], target_position[2] + distance),
+                "rotation": (math.radians(0), 0, math.radians(180)),
+                "ortho_scale": self.get_ortho_scale(distance),
+                "camera_type": "ORTHO",
+                "look_at": target_position,
+                "shading_type": "MATERIAL",
+                "color_type": "OBJECT",
+            },
+            {
+                "name": "Bottom_Angeled",
+                "location": (target_position[0], target_position[1], target_position[2]- distance),
+                "rotation": (math.radians(0), 0, math.radians(0)),
+                "ortho_scale": self.get_ortho_scale(distance),
+                "camera_type": "ORTHO",
+                "look_at": target_position,
+                "shading_type": "SOLID",
+                "color_type": "OBJECT"
+            },
             {
                 "name": "Front",
                 "location": (target_position[0], target_position[1] - distance, target_position[2]),
@@ -290,26 +314,6 @@ class BlenderMCPServer:
                 "camera_type": "PERSP",
                 "look_at": target_position,
                 "shading_type": "SOLID",
-                "color_type": "OBJECT",
-            },
-            {
-                "name": "Bottom_Angeled",
-                "location": (target_position[0], target_position[1], target_position[2]- distance),
-                "rotation": (math.radians(0), 0, math.radians(0)),
-                "ortho_scale": self.get_ortho_scale(distance),
-                "camera_type": "ORTHO",
-                "look_at": target_position,
-                "shading_type": "SOLID",
-                "color_type": "OBJECT"
-            },
-            {
-                "name": "Top",
-                "location": (target_position[0], target_position[1], target_position[2] + distance),
-                "rotation": (math.radians(0), 0, math.radians(180)),
-                "ortho_scale": self.get_ortho_scale(distance),
-                "camera_type": "ORTHO",
-                "look_at": target_position,
-                "shading_type": "MATERIAL",
                 "color_type": "OBJECT",
             }
         ]
@@ -405,24 +409,23 @@ class BlenderMCPServer:
                             font = ImageFont.load_default()
                         
                         text = (f"Grid: {grid_info['grid_settings']['base_unit']:.2f}{grid_info['unit_system']}/unit\n"
-                            f"Subdivisions: {grid_info['grid_settings']['subdivisions']}\n"
+                            f"Subdivisions: {grid_info['grid_settings']['subdivisions']}\nclip_start: {round(self.clip_start_tmp, 2)}\n"
                             )
-                        
-                        draw.text((border_size + 10, composite_height - border_size - 30), 
+                        draw.text((border_size + 10, composite_height - border_size - 760), 
                                 text, fill=(255, 255, 255), font=font)
                         
-                        text = ("Othographic\nMATERIAL mode\nTOP View")
-                        draw.text((composite_width - border_size - 100, composite_height - border_size - 50), 
-                                text, fill=(255, 255, 255), font=font)
-                        text = ("Othographic\nSOLID mode\nButtom View")
+                        text = ("Perspective\nSOLID mode\nRIGHT View")
+                        draw.text((composite_width - border_size - 75, composite_height - border_size - 50), 
+                                text, fill=(255, 255, 255), font=font)#Right_Buttom in image(view4)
+                        text = ("Perspective\nSOLID mode\nFRONT View")
                         draw.text((composite_width - border_size - 466, composite_height - border_size - 50), 
-                                text, fill=(255, 255, 255), font=font)
-                        text = ("Perspective\nSOLID mode\nFront View")
-                        draw.text((composite_width - border_size - 460, composite_height - border_size - 436), 
-                                text, fill=(255, 255, 255), font=font)
-                        text = ("Perspective\nSOLID mode\nRight View")
-                        draw.text((composite_width - border_size - 75, composite_height - border_size - 436), 
-                                text, fill=(255, 255, 255), font=font)
+                                text, fill=(255, 255, 255), font=font)#Left_Buttom in image(view3)
+                        text = ("Orthographic\nMATERIAL mode\nTOP View")
+                        draw.text((composite_width - border_size - 486, composite_height - border_size - 436), 
+                                text, fill=(255, 255, 255), font=font)#Left_Top in image(view1)
+                        text = ("Orthographic\nSOLID mode\nBOTTOM View")
+                        draw.text((composite_width - border_size - 85, composite_height - border_size - 436), 
+                                text, fill=(255, 255, 255), font=font)#Right_Top in image(view2)
 
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     composite_path = os.path.join(output_dir, f"composite_{timestamp}.png")
