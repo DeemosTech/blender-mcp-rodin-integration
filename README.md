@@ -51,7 +51,16 @@ curl -LsSf https://www.mcp-for-blender.com/install.sh | sh
 **Windows** (PowerShell)
 
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://www.mcp-for-blender.com/install.ps1 | iex"
+irm https://www.mcp-for-blender.com/install.ps1 | iex
+```
+
+From Command Prompt instead: `powershell -c "irm https://www.mcp-for-blender.com/install.ps1 | iex"`
+
+Prefer not to run a script, or Windows Defender blocked it? Install uv with winget, open a new terminal, then run setup:
+
+```powershell
+winget install --id=astral-sh.uv -e
+uvx mcp-for-blender setup
 ```
 
 Already have uv? Run `uvx mcp-for-blender setup` instead.
@@ -76,7 +85,9 @@ brew install uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Windows
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+winget install --id=astral-sh.uv -e
+# or, with uv's installer
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
 > **Warning:** Do not proceed before installing uv. Use the official installer — *not* `pip install uv`.
@@ -215,10 +226,10 @@ curl -LsSf https://www.mcp-for-blender.com/install.sh | sh
 
 ```powershell
 # Windows (PowerShell)
-powershell -ExecutionPolicy ByPass -c "irm https://www.mcp-for-blender.com/install.ps1 | iex"
+irm https://www.mcp-for-blender.com/install.ps1 | iex
 ```
 
-Already have uv? Run `uvx mcp-for-blender setup` instead. See [Quickstart](#quickstart) for what it changes. The rest of this section covers manual setup.
+Already have uv? Run `uvx mcp-for-blender setup` instead. On Windows, `winget install --id=astral-sh.uv -e` installs uv without running a script. See [Quickstart](#quickstart) for what it changes. The rest of this section covers manual setup.
 
 ### Prerequisites
 
@@ -236,7 +247,13 @@ brew install uv
 
 **Windows**
 ```powershell
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+winget install --id=astral-sh.uv -e
+```
+
+Then open a new terminal so it's on your PATH. Or use uv's installer:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
 Then add uv to the user path in Windows (you may need to restart Claude Desktop after):
