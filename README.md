@@ -202,7 +202,7 @@ The addon starts its server when Blender opens. To check, press `N` in the 3D vi
 
 ## Premium
 
-Generate AI 3D models (Meshy, Hunyuan3D, Tripo, Hyper3D Rodin) straight into Blender without bringing your own API keys. [More details](https://www.mcp-for-blender.com/premium)
+Generate AI 3D models (Meshy, Hunyuan3D, Tripo, Hyper3D Rodin) straight into Blender without bringing your own API keys. [More details](https://www.mcp-for-blender.com/premium?ref=readme)
 
 ## Components
 

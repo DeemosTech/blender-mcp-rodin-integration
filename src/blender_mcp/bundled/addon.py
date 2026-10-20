@@ -5406,6 +5406,7 @@ def import_model_files(files, name):
 # Overridden by BLENDERMCP_PREMIUM_API_URL, so forks can point at their own
 # Supabase project without editing code.
 PREMIUM_API_URL_DEFAULT = "https://dbunjhuejdwwcafedslw.supabase.co/functions/v1/premium"
+# Links to it add ?ref= saying where the user clicked, for the site's analytics.
 PREMIUM_PRICING_URL = "https://mcp-for-blender.com/premium"
 PREMIUM_MANAGE_URL_DEFAULT = "https://mcp-for-blender.com/account"
 PREMIUM_TIMEOUT = 30
@@ -5757,7 +5758,8 @@ def premium_tripo_status():
     enabled = bool(getattr(bpy.context.scene, "blendermcp_use_tripo", False))
     if premium_active():
         return premium_integration_status("tripo", enabled)
-    return {"enabled": False, "message": "Tripo is only available with MCP for Blender Premium."}
+    return {"enabled": False, "message": "Tripo is only available with MCP for Blender Premium: "
+                                         f"{PREMIUM_PRICING_URL}?ref=addon-tripo"}
 
 
 def premium_tripo_handlers():
@@ -5886,14 +5888,14 @@ def premium_draw_preferences(prefs, box):
     _premium_draw_quality(prefs, col)
     row = col.row(align=True)
     row.operator("blendermcp.premium_open_account", text="Manage account", icon='URL')
-    row.operator("wm.url_open", text="Get Premium", icon='FUND').url = PREMIUM_PRICING_URL
+    row.operator("wm.url_open", text="Get Premium", icon='FUND').url = PREMIUM_PRICING_URL + "?ref=addon-prefs"
 
 
 def premium_draw_upsell(layout):
     """For own-key users: a single line saying Premium exists and where to get it."""
     row = layout.row(align=True)
     row.label(text="No API keys? Use Premium", icon='FUND')
-    row.operator("wm.url_open", text="Get Premium").url = PREMIUM_PRICING_URL
+    row.operator("wm.url_open", text="Get Premium").url = PREMIUM_PRICING_URL + "?ref=addon-upsell"
 
 
 def premium_draw_panel(layout, prefs):
@@ -5905,14 +5907,14 @@ def premium_draw_panel(layout, prefs):
         col.label(text="Activate your license key in Preferences.")
         row = col.row(align=True)
         row.operator("screen.userpref_show", text="Open Preferences", icon='PREFERENCES').section = 'ADDONS'
-        row.operator("wm.url_open", text="Get Premium", icon='FUND').url = PREMIUM_PRICING_URL
+        row.operator("wm.url_open", text="Get Premium", icon='FUND').url = PREMIUM_PRICING_URL + "?ref=addon-sidebar"
     elif not _premium_status:
         col.operator("blendermcp.premium_refresh", text="Load plan", icon='FILE_REFRESH')
     elif not _premium_status.get("tier"):
         col.label(text="Your subscription isn't active.")
         row = col.row(align=True)
         row.operator("blendermcp.premium_open_account", text="Manage account", icon='URL')
-        row.operator("wm.url_open", text="Get Premium", icon='FUND').url = PREMIUM_PRICING_URL
+        row.operator("wm.url_open", text="Get Premium", icon='FUND').url = PREMIUM_PRICING_URL + "?ref=addon-sidebar"
     elif prefs is not None:
         # Quality only means something once there's a plan to spend.
         col.separator()

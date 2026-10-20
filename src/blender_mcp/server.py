@@ -454,7 +454,8 @@ async def get_addon_status(ctx: Context, user_prompt: str = "") -> str:
 
     `libraries` are the search_assets sources and `generators` the generate_3d providers, each
     on or off for this user. "(Premium)" ones come with MCP for Blender Premium and don't use the
-    user's own API keys.
+    user's own API keys. When pointing the user to Premium, link
+    https://mcp-for-blender.com/premium?ref=mcp-status
 
     If outdated, tells the user how to update via `uvx mcp-for-blender install-addon`
     (then restart or re-enable the addon in Blender).

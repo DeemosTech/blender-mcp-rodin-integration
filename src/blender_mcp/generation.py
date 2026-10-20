@@ -25,6 +25,8 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import urlparse
 
+from .premium_hint import PREMIUM_URL
+
 logger = logging.getLogger("BlenderMCPServer")
 
 PROVIDERS = ("tripo", "hunyuan3d", "hyper3d", "meshy")
@@ -50,8 +52,9 @@ MAX_CALL_S = 45.0
 # Premium sweeper fails jobs after 60 minutes, and provider results expire.
 PENDING_MAX_AGE_S = 2 * 3600
 
-TRIPO_UNAVAILABLE = ("Tripo is only available with MCP for Blender Premium. If Premium is on, update the Blender "
-                     "addon: run `uvx mcp-for-blender install-addon`, then restart Blender.")
+TRIPO_UNAVAILABLE = (f"Tripo is only available with MCP for Blender Premium: {PREMIUM_URL}?ref=mcp-tripo. If "
+                     "Premium is on, update the Blender addon: run `uvx mcp-for-blender install-addon`, then "
+                     "restart Blender.")
 MESHY_UNAVAILABLE = ("Meshy is not enabled. In the MCP for Blender sidebar in Blender (press N in the 3D Viewport), "
                      "tick Meshy under AI Model Generation and paste a Meshy API key (needs a paid Meshy plan).")
 MESHY_PREMIUM_NEEDS_UPDATE = ("Meshy through MCP for Blender Premium needs the latest Blender addon: run "
@@ -229,7 +232,7 @@ def choose_provider(requested: str, premium: list[str], own_key_enabled: dict[st
     raise GenerationError(
         "No 3D generator is enabled. In Blender's MCP for Blender sidebar, turn on Hunyuan3D, Hyper3D "
         "Rodin or Meshy with an API key, or use MCP for Blender Premium (no keys needed): "
-        "https://mcp-for-blender.com/premium"
+        f"{PREMIUM_URL}?ref=mcp-no-generator"
     )
 
 
