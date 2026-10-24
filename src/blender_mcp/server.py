@@ -371,6 +371,9 @@ def _maybe_handshake_addon(blender: BlenderConnection) -> None:
         _addon_handshake_checked = True
     try:
         _addon_handshake = handshake_addon(blender)
+        get_telemetry().set_addon_info(
+            _addon_handshake.addon_version, _addon_handshake.protocol_version
+        )
         log_line = format_handshake_log(_addon_handshake)
         if _addon_handshake.up_to_date:
             logger.info(log_line)
