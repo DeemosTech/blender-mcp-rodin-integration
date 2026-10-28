@@ -43,7 +43,9 @@ def _run(send, job, wait=100, pending=None):
 
 def test_auto_prefers_premium_generators():
     assert choose_provider("auto", ["hyper3d", "tripo"], {}) == ("tripo", True)
-    assert choose_provider("auto", ["hyper3d", "tripo", "meshy"], {}) == ("meshy", True)
+    assert choose_provider("auto", ["hyper3d", "tripo", "meshy"], {}) == ("tripo", True)
+    assert choose_provider("auto", ["hyper3d", "meshy"], {}) == ("meshy", True)
+    assert choose_provider("auto", ["hunyuan3d", "hyper3d"], {}) == ("hyper3d", True)
     assert choose_provider("auto", ["hunyuan3d"], {"hyper3d": True}) == ("hunyuan3d", True)
 
 

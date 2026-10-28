@@ -33,7 +33,7 @@ PROVIDERS = ("tripo", "hunyuan3d", "hyper3d", "meshy")
 
 # Auto-pick order. Premium generators come first because the user is paying
 # for them and they run the stronger models; among those Tripo is Premium-only.
-PREMIUM_ORDER = ("meshy", "tripo", "hunyuan3d", "hyper3d")
+PREMIUM_ORDER = ("tripo", "meshy", "hyper3d", "hunyuan3d")
 OWN_KEY_ORDER = ("hunyuan3d", "hyper3d", "meshy")
 
 # Meshy task kinds: text preview, text refine, image to model, and a Premium
