@@ -1,8 +1,6 @@
 <div align="center">
 
-# MCP for Blender
-
-**Connect Blender to any LLM**
+<img src="assets/logo-banner.png" alt="MCP for Blender — Connect Blender to any LLM" width="480" />
 
 *formerly `blender-mcp` — the PyPI package is now [`mcp-for-blender`](https://pypi.org/project/mcp-for-blender/).*
 *Existing setups keep working; no config change is required. [Read more](https://github.com/ahujasid/mcp-for-blender/issues/366)*
